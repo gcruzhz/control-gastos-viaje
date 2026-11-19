@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Control de Gastos de Viaje</string>
+    <string name="title_activity_main">Control de Gastos de Viaje</string>
+    <string name="package_name">mx.gerardo.gastosviaje</string>
+    <string name="custom_url_scheme">mx.gerardo.gastosviaje</string>
+</resources>

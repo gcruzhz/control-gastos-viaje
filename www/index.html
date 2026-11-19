@@ -1,0 +1,2503 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Control de Gastos de Viaje</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: #f2f5f0; color: #1c2b1a; }
+  #splash { position: fixed; inset: 0; background: #fff; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; transition: opacity .5s; padding-top: env(safe-area-inset-top, 0px); }
+  #splash.hide { opacity: 0; pointer-events: none; }
+  .dots-row { display: flex; gap: 18px; position: relative; padding: 6px 0; }
+  .dots-line { position: absolute; left: 32px; right: 32px; top: 50%; margin-top: -2px; border-top: 3px dotted #ccd6c8; transform: scaleX(0); transform-origin: left center; }
+  #splash.play .dots-line { animation: drawLine .9s ease .55s forwards; }
+  .dot { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; opacity: 0; box-shadow: 0 4px 10px rgba(12,50,44,.18); }
+  #splash.play .dot { animation: pop .45s cubic-bezier(.34,1.56,.64,1) both; }
+  .dot svg { width: 34px; height: 34px; }
+  .dot-blue { background: #4A90D9; animation-delay: .05s; }
+  .dot-pink { background: #F45B69; animation-delay: .3s; }
+  .dot-yellow { background: #F5B81D; animation-delay: .55s; }
+  .dot-green { background: #73BA25; animation-delay: .8s; }
+  @keyframes pop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes drawLine { to { transform: scaleX(1); } }
+  #splash p { margin: 0; color: #0C322C; font-weight: 700; font-size: 18px; text-align: center; opacity: 0; }
+  #splash.play p { animation: titleIn .5s ease 1.35s both; }
+  @keyframes titleIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  /* Tira animada del menu de inicio: avion -> tren -> barco -> hotel (ciclo 8s) */
+  .trip-strip { position: relative; height: 68px; overflow: hidden; border-radius: 12px; background: linear-gradient(180deg, #f4f8f3, #e9f1e8); margin-bottom: 10px; }
+  .trip-strip .route { position: absolute; left: 14px; right: 14px; top: 50%; margin-top: -1px; border-top: 3px dotted #ccd6c8; }
+  .trip-veh { position: absolute; top: 50%; left: -52px; width: 46px; height: 46px; margin-top: -23px; border-radius: 50%; display: flex; align-items: center; justify-content: center; opacity: 0; box-shadow: 0 3px 8px rgba(12,50,44,.18); }
+  .trip-veh svg { width: 26px; height: 26px; }
+  .veh-plane { background: #4A90D9; animation: tripPlane 8s linear infinite; }
+  .veh-train { background: #F5B81D; animation: tripTrain 8s linear infinite; }
+  .veh-boat { background: #73BA25; animation: tripBoat 8s linear infinite; }
+  .veh-hotel { background: #F45B69; left: auto; right: 12px; animation: tripHotel 8s linear infinite; }
+  @keyframes tripPlane { 0% { left: -52px; opacity: 0; transform: translateY(4px); } 4% { opacity: 1; } 12% { transform: translateY(-4px); } 20% { left: 30%; opacity: 1; transform: translateY(2px); } 25%, 100% { left: 32%; opacity: 0; transform: translateY(0); } }
+  @keyframes tripTrain { 0%, 24% { left: -52px; opacity: 0; } 28% { opacity: 1; } 46% { left: 55%; opacity: 1; } 50%, 100% { left: 57%; opacity: 0; } }
+  @keyframes tripBoat { 0%, 48% { left: -52px; opacity: 0; } 52% { opacity: 1; } 60% { transform: translateY(-3px); } 66% { transform: translateY(2px); } 70% { left: 76%; opacity: 1; transform: translateY(0); } 74%, 100% { left: 78%; opacity: 0; } }
+  @keyframes tripHotel { 0%, 72% { opacity: 0; transform: scale(.4); } 78% { opacity: 1; transform: scale(1.12); } 82%, 94% { opacity: 1; transform: scale(1); } 98%, 100% { opacity: 0; transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .trip-veh { animation: none; } .veh-hotel { opacity: 1; } }
+  header { background: #0C322C; color: #fff; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 16px; display: flex; align-items: center; gap: 12px; }
+  header img { width: 44px; height: 44px; object-fit: contain; background: #fff; border-radius: 10px; padding: 3px; }
+  header h1 { font-size: 19px; margin: 0; }
+  header small { color: #bfe3a8; }
+  main { padding: 12px 12px max(16px, env(safe-area-inset-bottom, 0px)); max-width: 720px; margin: 0 auto; }
+  .stats { display: flex; gap: 8px; margin: 4px 0 12px; flex-wrap: wrap; }
+  .stat { flex: 1 1 40%; background: #fff; border-radius: 10px; padding: 10px 6px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .stat b { display: block; font-size: 20px; color: #0C322C; }
+  .stat b.neg { color: #b3261e; }
+  .stat span { font-size: 12px; color: #666; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; }
+  input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 15px; background: #fff; }
+  select:disabled { opacity: .55; }
+  input[type=checkbox] { width: 22px; height: 22px; accent-color: #73BA25; flex: none; }
+  button { padding: 10px 14px; border: 0; border-radius: 8px; font-size: 15px; cursor: pointer; }
+  .btn-green { background: #73BA25; color: #fff; font-weight: 700; }
+  .btn-dark { background: #0C322C; color: #fff; }
+  .btn-ghost { background: #e8ede6; color: #333; }
+  .btn-danger { background: #fbe9e7; color: #b3261e; }
+  .cta { width: 100%; padding: 14px; font-size: 16px; margin-bottom: 12px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tab { padding: 8px 12px; border-radius: 20px; background: #e8ede6; font-size: 14px; border: 0; }
+  .tab.on { background: #0C322C; color: #fff; }
+  .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.09); }
+  .card h2 { margin: 0 0 2px; font-size: 17px; color: #0C322C; }
+  .card h3 { margin: 0 0 6px; font-size: 14px; color: #0C322C; text-transform: uppercase; letter-spacing: .4px; }
+  .card .sub { color: #666; font-size: 13px; margin-bottom: 8px; }
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+  .b-green { background: #d9f2c2; color: #2e6b00; }
+  .b-gray { background: #e3e8ef; color: #445; }
+  .b-amber { background: #fff3cd; color: #7a5b00; }
+  .b-red { background: #fbe9e7; color: #b3261e; }
+  .bar { height: 9px; background: #e6ebe4; border-radius: 6px; overflow: hidden; margin: 8px 0 4px; }
+  .bar i { display: block; height: 100%; background: #73BA25; }
+  .bar i.over { background: #b3261e; }
+  .pct { font-size: 13px; color: #555; }
+  .line { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid #eef1ec; font-size: 14px; }
+  .line b { white-space: nowrap; }
+  .line .over { color: #b3261e; font-weight: 700; }
+  .item { padding: 10px 0; border-top: 1px solid #eef1ec; }
+  .item:first-child { border-top: 0; }
+  .item .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .item .top b { font-size: 15px; }
+  .item .amt { font-weight: 700; color: #0C322C; white-space: nowrap; }
+  .item .meta { font-size: 13px; color: #666; margin-top: 2px; }
+  .item .note { font-size: 13px; color: #555; margin-top: 4px; }
+  .item .thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; margin-top: 6px; border: 1px solid #ddd; }
+  .ocr-status { font-size: 12px; color: #555; margin-top: 4px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid2 .full { grid-column: 1 / -1; }
+  .field { margin-bottom: 8px; }
+  .field label { display: block; font-size: 12px; color: #666; margin-bottom: 3px; }
+  .checkrow { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 15px; }
+  .empty { text-align: center; color: #888; padding: 26px 10px; }
+  .hidden { display: none !important; }
+  #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #lightbox img { max-width: 100%; max-height: 90vh; border-radius: 8px; }
+  .warn { color: #b3261e; font-size: 13px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="splash">
+  <div class="dots-row">
+    <div class="dots-line"></div>
+    <div class="dot dot-blue" title="Maleta"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M4 13h16"/></svg></div>
+    <div class="dot dot-pink" title="Hotel"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="1"/><path d="M3 21h18"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg></div>
+    <div class="dot dot-yellow" title="Auto"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l1.4-3.6A2 2 0 0 1 8.3 7h7.4a2 2 0 0 1 1.9 1.4L19 12"/><path d="M4 12h16v4a1 1 0 0 1-1 1h-1.5"/><path d="M4 12v4a1 1 0 0 0 1 1h1.5"/><circle cx="7.5" cy="17" r="1.8"/><circle cx="16.5" cy="17" r="1.8"/><path d="M9.3 17h5.4"/></svg></div>
+    <div class="dot dot-green" title="Comida"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16"/><path d="M6 18a6 6 0 0 1 12 0"/><path d="M12 12V9.5"/><circle cx="12" cy="8.5" r="1" fill="#fff" stroke="none"/></svg></div>
+  </div>
+  <p>Control de Gastos de Viaje</p>
+</div>
+
+<header>
+  <img src="app-icon.png" alt="Maleta de viaje">
+  <div>
+    <h1>Control de Gastos de Viaje</h1>
+    <small id="appVersionLabel">Presupuesto, gastos y facturación por viaje · Versión 1.20</small>
+  </div>
+</header>
+
+<main>
+  <div id="homeView">
+    <div class="trip-strip" aria-hidden="true">
+      <div class="route"></div>
+      <div class="trip-veh veh-plane"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></div>
+      <div class="trip-veh veh-train"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="13" rx="2"/><path d="M4 10h16"/><path d="M8 6.5h2M14 6.5h2"/><path d="M8 19.5v-3.5M16 19.5v-3.5"/><circle cx="8" cy="19.5" r="1.5"/><circle cx="16" cy="19.5" r="1.5"/></svg></div>
+      <div class="trip-veh veh-boat"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10"/><path d="M12 4l6 8h-6z"/><path d="M4 14h16l-2 5H6l-2-5z"/><path d="M2 21c1.8-1.6 3.6-1.6 5.4 0s3.6 1.6 5.4 0 3.6-1.6 5.4 0"/></svg></div>
+      <div class="trip-veh veh-hotel"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="1"/><path d="M3 21h18"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg></div>
+    </div>
+    <button class="btn-green cta" id="btnGoCreate">+ Crear nuevo viaje</button>
+    <div id="newTripBox" class="card hidden">
+    <div style="margin-top:2px">
+      <div class="grid2">
+        <div class="field full"><label>Nombre del viaje / proyecto</label><input id="tNombre" placeholder="Ej. Mantenimiento equipos Monterrey"></div>
+        <div class="field full"><label>Destino</label><input id="tDestino" placeholder="Ciudad, estado..."></div>
+        <div class="field"><label>Fecha de inicio</label><input id="tInicio" type="date"></div>
+        <div class="field"><label>Fecha de fin</label><input id="tFin" type="date"></div>
+        <div class="field"><label>Moneda</label>
+          <select id="tMoneda"><option>MXN</option><option>USD</option><option>EUR</option></select></div>
+      </div>
+      <button class="btn-green" id="btnAddTrip" style="width:100%">Crear viaje</button>
+      <div class="row" style="margin-top:8px">
+        <button class="btn-ghost" id="btnCancelTrip" style="flex:1">Cancelar</button>
+        <button class="btn-dark" id="btnSaveLaterTrip" style="flex:1">Guardar para después</button>
+      </div>
+    </div>
+    </div>
+    <div class="card">
+      <h3>Respaldar viajes (CSV)</h3>
+      <div class="actions">
+        <button class="btn-dark" id="btnImportCsv" style="flex:1">Importar CSV</button>
+        <button class="btn-ghost" id="btnExportAllCsv" style="flex:1">Exportar todos</button>
+      </div>
+      <input type="file" id="importCsvFile" accept=".csv,text/csv" class="hidden">
+      <div class="sub" style="margin-top:8px">El CSV incluye los datos del viaje, facturación, personas, presupuesto y gastos. Las fotos de tickets, el PDF de la constancia y las facturas PDF/XML no se incluyen en el CSV.</div>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn-dark" id="btnVistaViaje" style="flex:1">Por viaje</button>
+      <button class="btn-ghost" id="btnVistaUnificada" style="flex:1">Unificados</button>
+    </div>
+    <div id="homeList"></div>
+    <div id="unifiedList" class="hidden"></div>
+    <div class="card" id="aboutCard">
+      <h3>Acerca de</h3>
+      <div class="line"><span>App</span><b>Control de Gastos de Viaje</b></div>
+      <div class="line"><span>Versión</span><b>1.20</b></div>
+      <div class="line"><span>Contacto</span><b><a href="mailto:gerardo.cruzhz@linux.com">gerardo.cruzhz@linux.com</a></b></div>
+      <div class="sub" style="margin-top:8px">© Gerardo Cruz Hernandez</div>
+      <div class="actions">
+        <button class="btn-dark" id="btnReportProblem" style="flex:1">Reportar un problema</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tripView" class="hidden">
+    <div class="row">
+      <button class="btn-ghost" id="btnHome">← Mis viajes</button>
+      <select id="tripSelect" style="flex:1"></select>
+      <button class="btn-danger" id="btnDelTrip" title="Eliminar viaje">Eliminar</button>
+    </div>
+
+    <div id="noTrip" class="empty hidden">Aún no hay viajes.<br>Crea uno con el botón “+ Crear nuevo viaje”.</div>
+
+  <div id="tripBody" class="hidden">
+    <div class="stats">
+      <div class="stat"><b id="sBudget">$0</b><span>Presupuestado</span></div>
+      <div class="stat"><b id="sSpent">$0</b><span>Gastado</span></div>
+      <div class="stat"><b id="sLeft">$0</b><span>Restante</span></div>
+      <div class="stat"><b id="sPct">0%</b><span>Usado</span></div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <button class="tab on" data-tab="resumen">Resumen</button>
+      <button class="tab" data-tab="presupuesto">Presupuesto</button>
+      <button class="tab" data-tab="gastos">Gastos</button>
+      <button class="tab" data-tab="personas">Personas</button>
+      <button class="tab" data-tab="facturacion">Facturación</button>
+      <button class="tab" data-tab="reporte">Reporte</button>
+    </div>
+
+    <section id="tab-resumen"></section>
+
+    <section id="tab-presupuesto" class="hidden">
+      <div class="card">
+        <h3>Agregar gasto planeado</h3>
+        <div class="grid2">
+          <div class="field"><label>Categoría</label><select id="bCat"></select></div>
+          <div class="field"><label>Monto estimado</label><input id="bMonto" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+          <div class="field full"><label>Concepto</label><input id="bConcepto" placeholder="Ej. Hotel 3 noches"></div>
+        </div>
+        <button class="btn-green" id="btnAddBudget" style="width:100%">Agregar al presupuesto</button>
+      </div>
+      <div class="card"><h3>Presupuesto del viaje</h3><div id="budgetList"></div></div>
+    </section>
+
+    <section id="tab-gastos" class="hidden">
+      <div class="card">
+        <h3>Registrar gasto real</h3>
+        <div class="grid2">
+          <div class="field" id="ePersonaField"><label>¿Quién lo gastó?</label><select id="ePersona"></select></div>
+          <div class="field"><label>Fecha</label><input id="eFecha" type="date"></div>
+          <div class="field"><label>Categoría</label><select id="eCat"></select></div>
+          <div class="field full"><label>Concepto</label><input id="eConcepto" placeholder="Ej. Comida con el cliente"></div>
+          <div class="field"><label>Monto</label><input id="eMonto" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+          <div class="field full"><label>Folio / UUID de factura (opcional)</label><input id="eFolio" placeholder="Folio o UUID de la factura"></div>
+          <div class="field full"><label>Nota (opcional)</label><input id="eNota" placeholder="Detalle del gasto"></div>
+        </div>
+        <div class="checkrow"><input type="checkbox" id="eFacturable" checked><label for="eFacturable">Se puede facturar</label></div>
+        <div class="row">
+          <button class="btn-dark" id="btnPhotoCam" style="flex:1">📷 Tomar foto del ticket</button>
+          <button class="btn-ghost" id="btnPhotoGal" style="flex:1">🖼️ Elegir de galería</button>
+        </div>
+        <input type="file" id="photoCam" accept="image/*" capture="environment" class="hidden">
+        <input type="file" id="photoGal" accept="image/*" class="hidden">
+        <div id="photoPreview"></div>
+        <div id="ocrStatus" class="ocr-status"></div>
+        <button class="btn-green" id="btnAddExpense" style="width:100%; margin-top:8px">Agregar gasto</button>
+      </div>
+      <div class="card">
+        <h3>Gastos del viaje</h3>
+        <div class="field" id="fPersonaField"><label>Filtrar por persona</label><select id="fPersona"></select></div>
+        <div id="expenseList"></div>
+      </div>
+    </section>
+
+    <section id="tab-personas" class="hidden">
+      <div class="card">
+        <h3>Agregar persona</h3>
+        <div class="grid2">
+          <div class="field"><label>Nombre</label><input id="pNombre" placeholder="Nombre completo"></div>
+          <div class="field"><label>Rol</label><input id="pRol" placeholder="Ej. Técnico, supervisor..."></div>
+          <div class="field full"><label>Notas (opcional)</label><input id="pNotas" placeholder="Notas sobre la persona"></div>
+        </div>
+        <button class="btn-green" id="btnAddPerson" style="width:100%">Agregar persona</button>
+      </div>
+      <div class="card"><h3>Personas del viaje</h3><div id="peopleList"></div></div>
+    </section>
+
+    <section id="tab-facturacion" class="hidden">
+      <div class="card">
+        <h3>Datos de facturación del viaje</h3>
+        <div class="field" id="copyBillingWrap" style="display:none">
+          <label>Usar datos de facturación de otro viaje</label>
+          <select id="selCopyBilling"><option value="">Elige un viaje…</option></select>
+          <div class="sub" id="copyBillingMsg" style="margin-top:4px"></div>
+        </div>
+        <div class="grid2">
+          <div class="field full"><label>Razón social</label><input id="fRazon" placeholder="Nombre o razón social"></div>
+          <div class="field"><label>RFC</label><input id="fRfc" placeholder="RFC" style="text-transform:uppercase"></div>
+          <div class="field"><label>Código postal</label><input id="fCp" inputmode="numeric" placeholder="C.P."></div>
+          <div class="field"><label>Régimen fiscal</label>
+            <select id="fRegimen">
+              <option value="">Seleccionar...</option>
+              <option value="601">601 · General de ley personas morales</option>
+              <option value="603">603 · Personas morales con fines no lucrativos</option>
+              <option value="605">605 · Sueldos y salarios</option>
+              <option value="606">606 · Arrendamiento</option>
+              <option value="612">612 · Personas físicas con actividad empresarial</option>
+              <option value="615">615 · Régimen de los ingresos por obtención de premios</option>
+              <option value="616">616 · Sin obligaciones fiscales</option>
+              <option value="625">625 · Régimen de las actividades empresariales con ingresos por plataformas tecnológicas</option>
+              <option value="626">626 · Régimen Simplificado de Confianza</option>
+            </select></div>
+          <div class="field"><label>Uso de CFDI</label>
+            <select id="fUso">
+              <option value="">Seleccionar...</option>
+              <option value="G01">G01 · Adquisición de mercancías</option>
+              <option value="G02">G02 · Devoluciones, descuentos o bonificaciones</option>
+              <option value="G03">G03 · Gastos en general</option>
+              <option value="P01">P01 · Por definir</option>
+              <option value="S01">S01 · Sin efectos fiscales</option>
+              <option value="D01">D01 · Honorarios médicos, dentales y hospitalarios</option>
+            </select></div>
+          <div class="field full"><label>Correo para facturación</label><input id="fCorreo" type="email" placeholder="correo@empresa.com"></div>
+          <div class="field full"><label>Constancia de situación fiscal (PDF, opcional)</label><input type="file" id="fConstancia" accept="application/pdf,.pdf"></div>
+        </div>
+        <div id="constanciaInfo"></div>
+        <div class="sub">El PDF de la constancia no se incluye en la exportación CSV.</div>
+        <button class="btn-green" id="btnSaveBilling" style="width:100%">Guardar datos de facturación</button>
+      </div>
+      <div class="card"><h3>Pendientes por facturar</h3><div id="pendingList"></div></div>
+      <div class="card"><h3>Ya facturados</h3><div id="invoicedList"></div></div>
+      <div class="card">
+        <h3>Enviar datos de facturación</h3>
+        <div id="billingSendSummary"></div>
+        <div class="field"><label>Número de WhatsApp</label><input id="fSendWA" type="tel" inputmode="tel" placeholder="Ej. 55 1234 5678"></div>
+        <button class="btn-green" id="btnSendBillingWA" style="width:100%; margin-bottom:8px">Enviar por WhatsApp</button>
+        <div class="field"><label>Correo destinatario</label><input id="fSendMail" type="email" placeholder="correo@ejemplo.com"></div>
+        <button class="btn-dark" id="btnSendBillingMail" style="width:100%">Enviar por correo</button>
+      </div>
+    </section>
+
+    <section id="tab-reporte" class="hidden">
+      <div class="card" id="reportView"></div>
+      <div class="card">
+        <h3>Compartir y descargar</h3>
+        <div class="actions">
+          <button class="btn-green" id="btnShareWA">WhatsApp</button>
+          <button class="btn-dark" id="btnShareMail">Correo</button>
+          <button class="btn-ghost" id="btnCsv">Descargar CSV</button>
+          <button class="btn-ghost" id="btnPdf">Descargar PDF</button>
+          <button class="btn-ghost" id="btnXlsx">Descargar Excel</button>
+        </div>
+      </div>
+    </section>
+  </div>
+  </div>
+</main>
+
+<div id="lightbox" class="hidden"><img id="lightboxImg" alt="Foto del ticket"></div>
+
+<script>
+var LS_KEY = 'gastos-viaje-v1';
+var CATS = ['Transporte', 'Hospedaje', 'Alimentación', 'Combustible', 'Casetas', 'Entretenimiento', 'Otros'];
+
+function uid() { return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function todayStr() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function fmtDateShort(iso) {
+  if (!iso) return '—';
+  var p = iso.split('-');
+  var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function fmtDateTime(ts) {
+  var d = new Date(ts);
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) +
+    ' ' + d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+}
+function money(n, cur) {
+  try { return new Intl.NumberFormat('es-MX', { style: 'currency', currency: cur || 'MXN' }).format(n || 0); }
+  catch (e) { return '$' + (n || 0).toFixed(2); }
+}
+
+var state = load();
+function load() {
+  try {
+    var raw = localStorage.getItem(LS_KEY);
+    if (raw) { var s = JSON.parse(raw); if (s && Array.isArray(s.trips)) return s; }
+  } catch (e) {}
+  return { trips: [], activeTripId: null };
+}
+function save() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+function activeTrip() {
+  return state.trips.find(function (t) { return t.id === state.activeTripId; }) || null;
+}
+function personName(trip, pid) {
+  if (!pid) return 'Compartido';
+  var p = (trip.people || []).find(function (x) { return x.id === pid; });
+  return p ? p.nombre : 'Compartido';
+}
+// Persona que se MUESTRA para un gasto (solo visualizacion; los datos
+// guardados no cambian: un gasto sin asignar sigue con personaId null).
+// Si el gasto tiene persona, es ella; si no tiene y el viaje tiene
+// exactamente 1 persona, es esa unica persona; en cualquier otro caso
+// (0 personas, o 2 o mas y gasto sin asignar) es null = "Compartido".
+function personaDeGasto(trip, gasto) {
+  var people = trip.people || [];
+  var pid = gasto ? gasto.personaId : null;
+  if (pid) {
+    var p = people.find(function (x) { return x.id === pid; });
+    if (p) return p;
+  }
+  if (people.length === 1) return people[0];
+  return null;
+}
+function displayPersonName(trip, gasto) {
+  var p = personaDeGasto(trip, gasto);
+  return p ? p.nombre : 'Compartido';
+}
+
+// ---- Estado de facturación de un gasto ----
+// Facturado: facturable Y (tiene folio O tiene PDF y XML de la factura).
+// El folio solo preserva los gastos ya marcados así; sin folio hacen falta ambos archivos.
+function esFacturado(e) {
+  if (!e || !e.facturable) return false;
+  if ((e.folio || '').trim()) return true;
+  return !!(e.facturaPdf && e.facturaPdf.data && e.facturaXml && e.facturaXml.data);
+}
+function estadoFactura(e) {
+  if (!e || !e.facturable) return 'No facturable';
+  return esFacturado(e) ? 'Facturado' : 'Pendiente por facturar';
+}
+function abrirArchivoFactura(file) {
+  if (!file || !file.data) return;
+  downloadBlob(dataUrlToBlob(file.data), file.nombre || 'factura').catch(function () {
+    var url = URL.createObjectURL(dataUrlToBlob(file.data));
+    window.open(url, '_blank');
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  });
+}
+
+function computeSummary(trip) {
+  var s = {
+    budgetTotal: 0, spentTotal: 0, remaining: 0, pct: 0,
+    byCat: {}, byPerson: [], byDay: [],
+    facturableTotal: 0, noFacturableTotal: 0, pendingTotal: 0, invoicedTotal: 0
+  };
+  CATS.forEach(function (c) { s.byCat[c] = { budget: 0, spent: 0 }; });
+  (trip.budget || []).forEach(function (b) {
+    s.budgetTotal += +b.monto || 0;
+    if (s.byCat[b.categoria]) s.byCat[b.categoria].budget += +b.monto || 0;
+  });
+  var perPerson = {}, perDay = {};
+  (trip.expenses || []).forEach(function (e) {
+    var m = +e.monto || 0;
+    s.spentTotal += m;
+    if (s.byCat[e.categoria]) s.byCat[e.categoria].spent += m;
+    var eff = personaDeGasto(trip, e);
+    var key = eff ? eff.id : '';
+    if (!perPerson[key]) perPerson[key] = { name: eff ? eff.nombre : 'Compartido', total: 0, count: 0 };
+    perPerson[key].total += m; perPerson[key].count++;
+    var day = e.fecha || '';
+    if (!perDay[day]) perDay[day] = 0;
+    perDay[day] += m;
+    if (e.facturable) {
+      s.facturableTotal += m;
+      if (esFacturado(e)) s.invoicedTotal += m; else s.pendingTotal += m;
+    } else {
+      s.noFacturableTotal += m;
+    }
+  });
+  s.remaining = s.budgetTotal - s.spentTotal;
+  s.pct = s.budgetTotal > 0 ? Math.round(s.spentTotal / s.budgetTotal * 100) : 0;
+  s.byPerson = Object.keys(perPerson).map(function (k) { return perPerson[k]; })
+    .sort(function (a, b) { return b.total - a.total; });
+  s.byDay = Object.keys(perDay).sort().map(function (d) { return { fecha: d, total: perDay[d] }; });
+  return s;
+}
+
+// ---- Reporte en texto (WhatsApp / correo) ----
+function reportText(trip, s) {
+  var L = [];
+  L.push('Control de Gastos de Viaje');
+  L.push(trip.nombre + (trip.destino ? ' · ' + trip.destino : ''));
+  L.push('Del ' + fmtDateShort(trip.inicio) + ' al ' + fmtDateShort(trip.fin));
+  L.push('');
+  L.push('Presupuestado: ' + money(s.budgetTotal, trip.moneda));
+  L.push('Gastado: ' + money(s.spentTotal, trip.moneda));
+  L.push('Restante: ' + money(s.remaining, trip.moneda) + ' (' + s.pct + '% usado)');
+  L.push('');
+  L.push('Por categoría:');
+  CATS.forEach(function (c) {
+    var b = s.byCat[c];
+    if (b.budget > 0 || b.spent > 0) {
+      L.push('- ' + c + ': gastado ' + money(b.spent, trip.moneda) + ' de ' + money(b.budget, trip.moneda));
+    }
+  });
+  L.push('');
+  L.push('Por persona:');
+  s.byPerson.forEach(function (p) { L.push('- ' + p.name + ': ' + money(p.total, trip.moneda) + ' (' + p.count + ' gastos)'); });
+  L.push('');
+  L.push('Facturación: facturable ' + money(s.facturableTotal, trip.moneda) +
+    ' · facturado ' + money(s.invoicedTotal, trip.moneda) +
+    ' · pendiente por facturar ' + money(s.pendingTotal, trip.moneda) +
+    ' · no facturable ' + money(s.noFacturableTotal, trip.moneda));
+  L.push('');
+  L.push('Generado el ' + fmtDateTime(Date.now()) + ' — Control de Gastos de Viaje');
+  return L.join('\n');
+}
+
+// ---- CSV ----
+function buildCsv(trip) {
+  function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
+  var lines = [];
+  lines.push('Viaje,' + q(trip.nombre));
+  lines.push('Destino,' + q(trip.destino || ''));
+  lines.push('Periodo,' + q(fmtDateShort(trip.inicio) + ' al ' + fmtDateShort(trip.fin)));
+  lines.push('Moneda,' + q(trip.moneda));
+  lines.push('');
+  lines.push('PRESUPUESTO');
+  lines.push('Categoria,Concepto,Monto estimado');
+  (trip.budget || []).forEach(function (b) { lines.push(q(b.categoria) + ',' + q(b.concepto) + ',' + (+b.monto || 0)); });
+  lines.push('');
+  lines.push('GASTOS REALES');
+  lines.push('Fecha,Categoria,Concepto,Monto,Persona,Facturable,Folio/UUID,Nota,Tiene foto,Estado factura');
+  (trip.expenses || []).forEach(function (e) {
+    lines.push([q(e.fecha), q(e.categoria), q(e.concepto), (+e.monto || 0), q(displayPersonName(trip, e)),
+      q(e.facturable ? 'Si' : 'No'), q(e.folio || ''), q(e.nota || ''), q(e.foto ? 'Si' : 'No'), q(estadoFactura(e))].join(','));
+  });
+  return lines.join('\n');
+}
+
+// ---- Respaldo de viajes en CSV (importar / exportar) ----
+// Formato del archivo (una sección por renglón, primera columna = sección):
+//   FORMATO,Control de Gastos de Viaje,1
+//   VIAJE,Nombre,Destino,Inicio,Fin,Moneda
+//   VIAJE,"Nombre del viaje","Destino",2026-11-10,2026-11-14,MXN
+//   FACTURACION,RazonSocial,RFC,Regimen,CP,UsoCFDI,Correo,WhatsApp,CorreoEnvio,Constancia
+//   FACTURACION,"Mi Empresa SA de CV",MEE123456ABC,612,64000,G03,correo@empresa.com,5512345678,envio@empresa.com,"constancia.pdf"
+// La columna Constancia lleva solo el nombre del archivo; el PDF no va en el
+// CSV (es muy pesado). Al importar, si la fila trae nombre de constancia pero
+// no hay archivo, el viaje queda simplemente sin adjuntar, sin error.
+//   PERSONA,Nombre,Rol,Notas
+//   PERSONA,"María López",Técnico,""
+//   PRESUPUESTO,Categoria,Concepto,Monto
+//   PRESUPUESTO,Hospedaje,"Hotel 3 noches",4500
+//   GASTO,Fecha,Categoria,Concepto,Monto,Persona,Facturable,Folio,Nota
+//   GASTO,2026-11-11,Alimentación,"Comida con cliente",350,"María López",Si,ABC-123,""
+// Cada bloque VIAJE (con sus secciones) es un viaje; el archivo puede llevar
+// varios viajes seguidos. Las personas se referencian por nombre en los gastos.
+// Las fotos de tickets NO van en el CSV (es solo texto). Al importar, todos
+// los ids se regeneran: importar el mismo archivo dos veces crea una copia,
+// nunca sobrescribe un viaje guardado.
+function csvCell(v) {
+  return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+}
+function tripCsvRows(trip) {
+  var b = trip.billing || {};
+  var lines = [];
+  lines.push('VIAJE,Nombre,Destino,Inicio,Fin,Moneda');
+  lines.push(['VIAJE', trip.nombre, trip.destino || '', trip.inicio || '', trip.fin || '', trip.moneda || 'MXN']
+    .map(function (v, i) { return i === 0 ? v : csvCell(v); }).join(','));
+  lines.push('FACTURACION,RazonSocial,RFC,Regimen,CP,UsoCFDI,Correo,WhatsApp,CorreoEnvio,Constancia');
+  lines.push(['FACTURACION', b.razon || '', b.rfc || '', b.regimen || '', b.cp || '', b.uso || '', b.correo || '', b.whatsapp || '', b.correoEnvio || '', (b.constancia && b.constancia.nombre) || '']
+    .map(function (v, i) { return i === 0 ? v : csvCell(v); }).join(','));
+  lines.push('PERSONA,Nombre,Rol,Notas');
+  (trip.people || []).forEach(function (p) {
+    lines.push(['PERSONA', p.nombre, p.rol || '', p.notas || '']
+      .map(function (v, i) { return i === 0 ? v : csvCell(v); }).join(','));
+  });
+  lines.push('PRESUPUESTO,Categoria,Concepto,Monto');
+  (trip.budget || []).forEach(function (it) {
+    lines.push(['PRESUPUESTO', it.categoria, it.concepto, (+it.monto || 0)]
+      .map(function (v, i) { return i === 0 ? v : (typeof v === 'number' ? v : csvCell(v)); }).join(','));
+  });
+  lines.push('GASTO,Fecha,Categoria,Concepto,Monto,Persona,Facturable,Folio,Nota');
+  (trip.expenses || []).forEach(function (e) {
+    lines.push(['GASTO', e.fecha || '', e.categoria, e.concepto, (+e.monto || 0), personName(trip, e.personaId), e.facturable ? 'Si' : 'No', e.folio || '', e.nota || '']
+      .map(function (v, i) { return i === 0 ? v : (typeof v === 'number' ? v : csvCell(v)); }).join(','));
+  });
+  return lines;
+}
+function buildTripExportCsv(trip) {
+  return ['FORMATO,Control de Gastos de Viaje,1'].concat(tripCsvRows(trip)).join('\n');
+}
+function buildAllTripsExportCsv() {
+  var lines = ['FORMATO,Control de Gastos de Viaje,1'];
+  state.trips.forEach(function (t) { lines = lines.concat(tripCsvRows(t)); });
+  return lines.join('\n');
+}
+// Parser CSV (RFC 4180): comillas, comas, saltos de línea dentro de campos,
+// CRLF y BOM. Devuelve un arreglo de renglones (arreglo de cadenas).
+function parseCsvRows(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  var rows = [], row = [], f = '', inQ = false;
+  for (var i = 0; i < text.length; i++) {
+    var ch = text[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { f += '"'; i++; }
+        else inQ = false;
+      } else if (ch === '\r') {
+        if (text[i + 1] === '\n') i++;
+        f += '\n'; // normaliza CRLF/CR dentro del campo a \n
+      } else f += ch;
+    } else if (ch === '"') {
+      inQ = true;
+    } else if (ch === ',') {
+      row.push(f); f = '';
+    } else if (ch === '\n') {
+      row.push(f); rows.push(row); row = []; f = '';
+    } else if (ch === '\r') {
+      // se ignora; el \n que sigue cierra el renglón
+    } else f += ch;
+  }
+  if (f !== '' || row.length) { row.push(f); rows.push(row); }
+  return rows;
+}
+function isIsoDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(s || ''); }
+function importTripsFromCsv(text) {
+  var rows = parseCsvRows(text || '');
+  if (!rows.length || rows[0][0] !== 'FORMATO' || rows[0][1] !== 'Control de Gastos de Viaje' || rows[0][2] !== '1') {
+    return { error: 'El archivo no es un respaldo de viajes válido. Debe ser un CSV exportado desde esta app ("Exportar CSV").' };
+  }
+  var imported = [], counts = { people: 0, budget: 0, expenses: 0 }, skipped = 0, dupNames = [];
+  var trip = null, personMap = {};
+  function finishTrip() {
+    if (trip) {
+      if (trip.nombre) {
+        if (state.trips.some(function (t) { return t.nombre === trip.nombre; })) dupNames.push(trip.nombre);
+        imported.push(trip);
+      } else skipped++;
+    }
+    trip = null; personMap = {};
+  }
+  rows.slice(1).forEach(function (r) {
+    var sec = (r[0] || '').trim().toUpperCase();
+    if (sec === 'VIAJE') {
+      if (r[1] === 'Nombre') return; // renglón de encabezado
+      finishTrip();
+      trip = {
+        id: uid(), nombre: (r[1] || '').trim(), destino: r[2] || '',
+        inicio: isIsoDate(r[3]) ? r[3] : todayStr(),
+        fin: isIsoDate(r[4]) ? r[4] : todayStr(),
+        moneda: ['MXN', 'USD', 'EUR'].indexOf(r[5]) >= 0 ? r[5] : 'MXN',
+        billing: { razon: '', rfc: '', regimen: '', cp: '', uso: '', correo: '', whatsapp: '', correoEnvio: '' },
+        people: [], budget: [], expenses: []
+      };
+    } else if (!trip) {
+      return; // renglones antes del primer VIAJE se ignoran
+    } else if (sec === 'FACTURACION') {
+      if (r[1] === 'RazonSocial') return;
+      trip.billing = {
+        razon: r[1] || '', rfc: r[2] || '', regimen: r[3] || '', cp: r[4] || '',
+        uso: r[5] || '', correo: r[6] || '', whatsapp: r[7] || '', correoEnvio: r[8] || '',
+        constancia: null // r[9] trae solo el nombre del archivo; el PDF no va en el CSV
+      };
+    } else if (sec === 'PERSONA') {
+      if (r[1] === 'Nombre') return;
+      var name = (r[1] || '').trim();
+      if (!name) return;
+      var p = { id: uid(), nombre: name, rol: r[2] || '', notas: r[3] || '' };
+      trip.people.push(p); personMap[name] = p.id; counts.people++;
+    } else if (sec === 'PRESUPUESTO') {
+      if (r[1] === 'Categoria') return;
+      var m = parseFloat(r[3]);
+      if (isNaN(m)) { skipped++; return; }
+      trip.budget.push({
+        id: uid(), categoria: CATS.indexOf(r[1]) >= 0 ? r[1] : 'Otros',
+        concepto: r[2] || '', monto: m
+      });
+      counts.budget++;
+    } else if (sec === 'GASTO') {
+      if (r[1] === 'Fecha') return;
+      var m2 = parseFloat(r[4]);
+      if (isNaN(m2)) { skipped++; return; }
+      var pname = (r[5] || '').trim();
+      trip.expenses.push({
+        id: uid(),
+        fecha: isIsoDate(r[1]) ? r[1] : todayStr(),
+        categoria: CATS.indexOf(r[2]) >= 0 ? r[2] : 'Otros',
+        concepto: r[3] || '', monto: m2,
+        personaId: personMap[pname] || null,
+        facturable: /^(si|s[ií]|true|1)$/i.test((r[6] || '').trim()),
+        folio: r[7] || '', nota: r[8] || '', foto: null, facturaPdf: null, facturaXml: null
+      });
+      counts.expenses++;
+    }
+    // secciones desconocidas se ignoran (compatibilidad hacia adelante)
+  });
+  finishTrip();
+  if (!imported.length) {
+    return { error: 'No se encontró ningún viaje válido en el archivo.' };
+  }
+  imported.forEach(function (t) { state.trips.push(t); });
+  save();
+  render();
+  return { imported: imported, counts: counts, skipped: skipped, dupNames: dupNames };
+}
+function importSummaryText(res) {
+  var L = [];
+  L.push('Se importaron ' + res.imported.length + (res.imported.length === 1 ? ' viaje' : ' viajes') + ':');
+  res.imported.forEach(function (t) { L.push('- ' + t.nombre); });
+  L.push(res.counts.people + ' personas, ' + res.counts.budget + ' renglones de presupuesto, ' + res.counts.expenses + ' gastos.');
+  if (res.dupNames.length) L.push('Ojo: ya existía un viaje con el nombre "' + res.dupNames.join('", "') + '"; se importó como copia.');
+  if (res.skipped) L.push('Se omitieron ' + res.skipped + ' renglones con datos inválidos.');
+  L.push('Las fotos de tickets, el PDF de la constancia y las facturas PDF/XML no vienen en el CSV.');
+  return L.join('\n');
+}
+
+// ---- PDF sin dependencias: PDF 1.4, A4, Helvetica ----
+function pdfEsc(s) {
+  return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+function pdfBytes(str) {
+  var b = new Uint8Array(str.length);
+  for (var i = 0; i < str.length; i++) b[i] = str.charCodeAt(i) & 0xFF;
+  return b;
+}
+function wrapText(text, maxChars) {
+  var words = String(text).split(/\s+/).filter(Boolean);
+  var lines = [], cur = '';
+  words.forEach(function (w) {
+    if ((cur + ' ' + w).trim().length > maxChars && cur) { lines.push(cur); cur = w; }
+    else cur = (cur + ' ' + w).trim();
+  });
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+// ---- PDF elegante: igual que la vista previa (colores Lapi) ----
+// Motor de dibujo mínimo sobre el generador PDF 1.4 hecho a mano:
+// encabezado verde azulado con kicker naranja claro, línea naranja,
+// tarjeta de datos, tarjetas de totales, barra de avance, secciones con
+// iconos vectoriales y tablas con encabezado de color y renglones alternados.
+var PDF_C = {
+  teal: [0, 0.529, 0.620], orange: [0.878, 0.439, 0],
+  kicker: [1, 0.690, 0.400], meta: [0.918, 0.957, 0.965],
+  track: [0.863, 0.922, 0.925], alt: [0.961, 0.961, 0.961],
+  light: [0.780, 0.808, 0.871], gray: [0.420, 0.447, 0.502],
+  dark: [0.067, 0.094, 0.153], border: [0.898, 0.906, 0.922],
+  white: [1, 1, 1]
+};
+// Anchos de glifo (unidades/1000 em) de Helvetica: sirven para alinear
+// texto a la derecha y centrarlo. Los dígitos y el signo $ miden igual
+// en regular y en bold, así que los montos quedan exactos.
+var HELV_W = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584];
+var HELV_ACC = { 225: 556, 233: 556, 237: 222, 243: 556, 250: 556, 241: 556, 193: 667, 201: 667, 205: 278, 211: 778, 218: 722, 209: 722, 252: 556, 220: 722, 161: 278, 191: 556, 231: 500, 199: 722, 183: 278 };
+function pdfText(s) {
+  return pdfEsc(String(s == null ? '' : s)
+    .replace(/[–—]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/[^\x00-\xFF]/g, '?'));
+}
+function charWidth(ch) {
+  var code = ch.charCodeAt(0);
+  if (code >= 32 && code <= 126) return HELV_W[code - 32];
+  if (HELV_ACC[code]) return HELV_ACC[code];
+  return 556;
+}
+function textWidth(str, size) {
+  var w = 0;
+  str = String(str == null ? '' : str);
+  for (var i = 0; i < str.length; i++) w += charWidth(str.charAt(i));
+  return w * size / 1000;
+}
+function truncateToWidth(str, maxW, size) {
+  str = String(str == null ? '' : str);
+  if (textWidth(str, size) <= maxW) return str;
+  while (str.length > 1 && textWidth(str + '...', size) > maxW) str = str.slice(0, -1);
+  return str + '...';
+}
+// Días del viaje (de inicio a fin, máx. 31); si no se puede calcular o el
+// viaje es más largo, se usan solo los días con gastos.
+function tripDays(trip, s) {
+  var days = [];
+  if (trip.inicio && trip.fin) {
+    var d = new Date(trip.inicio + 'T00:00:00');
+    var end = new Date(trip.fin + 'T00:00:00');
+    if (!isNaN(d) && !isNaN(end) && end >= d) {
+      var guard = 0;
+      while (d <= end && guard < 31) {
+        days.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+        d.setDate(d.getDate() + 1);
+        guard++;
+      }
+      if (d <= end) return [];
+    }
+  }
+  if (!days.length) (s.byDay || []).forEach(function (x) { days.push(x.fecha); });
+  return days;
+}
+function buildReportPdf(trip, s) {
+  var W = 595, H = 842, ML = 48, CW = W - ML * 2; // 499
+  var TOP = H - ML; // 794, inicio del contenido en páginas 2+
+  var BOTTOM = 56; // el pie va en y=28..44
+  var pages = [];
+  var cur = null;
+  function n1(v) { return Math.round(v * 10) / 10; }
+  function newPage(first) {
+    cur = { ops: [], y: first ? 748 : TOP, first: !!first };
+    pages.push(cur);
+  }
+  function ensure(h) { if (cur.y - h < BOTTOM) newPage(false); }
+  function rg(c) { return c[0].toFixed(3) + ' ' + c[1].toFixed(3) + ' ' + c[2].toFixed(3); }
+  function fillRect(x, y, w, h, c) { cur.ops.push(rg(c) + ' rg ' + n1(x) + ' ' + n1(y) + ' ' + n1(w) + ' ' + n1(h) + ' re f'); }
+  function strokeRect(x, y, w, h, c, lw) { cur.ops.push(rg(c) + ' RG ' + (lw || 0.75) + ' w ' + n1(x) + ' ' + n1(y) + ' ' + n1(w) + ' ' + n1(h) + ' re S'); }
+  function hline(x1, x2, y, c, lw) { cur.ops.push(rg(c) + ' RG ' + (lw || 0.5) + ' w ' + n1(x1) + ' ' + n1(y) + ' m ' + n1(x2) + ' ' + n1(y) + ' l S'); }
+  function vline(x, y1, y2, c, lw) { cur.ops.push(rg(c) + ' RG ' + (lw || 0.5) + ' w ' + n1(x) + ' ' + n1(y1) + ' m ' + n1(x) + ' ' + n1(y2) + ' l S'); }
+  function dline(x1, y1, x2, y2, c, lw) { cur.ops.push(rg(c) + ' RG ' + (lw || 0.5) + ' w ' + n1(x1) + ' ' + n1(y1) + ' m ' + n1(x2) + ' ' + n1(y2) + ' l S'); }
+  function txt(x, y, str, font, size, c) {
+    cur.ops.push('BT /' + font + ' ' + size + ' Tf ' + rg(c) + ' rg ' + n1(x) + ' ' + n1(y) + ' Td (' + pdfText(str) + ') Tj ET');
+  }
+  function txtR(xRight, y, str, font, size, c) { txt(xRight - textWidth(str, size), y, str, font, size, c); }
+  function txtC(x, w, y, str, font, size, c) { txt(x + (w - textWidth(str, size)) / 2, y, str, font, size, c); }
+  function circle(cx, cy, r, c, fill) {
+    var k = 0.5523 * r;
+    cur.ops.push(rg(c) + (fill ? ' rg ' : ' RG 1 w ') +
+      n1(cx + r) + ' ' + n1(cy) + ' m ' +
+      n1(cx + r) + ' ' + n1(cy + k) + ' ' + n1(cx + k) + ' ' + n1(cy + r) + ' ' + n1(cx) + ' ' + n1(cy + r) + ' c ' +
+      n1(cx - k) + ' ' + n1(cy + r) + ' ' + n1(cx - r) + ' ' + n1(cy + k) + ' ' + n1(cx - r) + ' ' + n1(cy) + ' c ' +
+      n1(cx - r) + ' ' + n1(cy - k) + ' ' + n1(cx - k) + ' ' + n1(cy - r) + ' ' + n1(cx) + ' ' + n1(cy - r) + ' c ' +
+      n1(cx + k) + ' ' + n1(cy - r) + ' ' + n1(cx + r) + ' ' + n1(cy - k) + ' ' + n1(cx + r) + ' ' + n1(cy) + ' c ' +
+      (fill ? 'f' : 'S'));
+  }
+  // Iconos vectoriales blancos dentro de un cuadro verde azulado de 22x22.
+  // (x, yTop): esquina superior izquierda del cuadro.
+  function drawIcon(kind, x, yTop) {
+    var wht = PDF_C.white, teal = PDF_C.teal;
+    fillRect(x, yTop - 22, 22, 22, teal);
+    var cx = x + 11, cy = yTop - 11;
+    if (kind === 'grid') {
+      fillRect(x + 4, yTop - 10, 6, 6, wht);
+      fillRect(x + 12, yTop - 10, 6, 6, wht);
+      fillRect(x + 4, yTop - 18, 6, 6, wht);
+      fillRect(x + 12, yTop - 18, 6, 6, wht);
+    } else if (kind === 'person') {
+      circle(cx, yTop - 8, 3.2, wht, true);
+      circle(cx, yTop - 19, 6.5, wht, true);
+      fillRect(x, yTop - 22, 22, 3, teal); // recorta la parte baja del cuerpo
+    } else if (kind === 'calendar') {
+      strokeRect(x + 4, yTop - 18, 14, 13, wht, 1.2);
+      vline(x + 8, yTop - 4, yTop - 8, wht, 1.2);
+      vline(x + 14, yTop - 4, yTop - 8, wht, 1.2);
+      hline(x + 4, x + 18, yTop - 11, wht, 1);
+    } else if (kind === 'receipt') {
+      strokeRect(x + 5, yTop - 19, 12, 15, wht, 1.2);
+      dline(x + 13, yTop - 4, x + 17, yTop - 8, wht, 1); // doblez de la esquina
+      hline(x + 8, x + 14, yTop - 11, wht, 1);
+      hline(x + 8, x + 14, yTop - 15, wht, 1);
+    } else if (kind === 'ticket') {
+      strokeRect(x + 3, yTop - 16, 16, 10, wht, 1.2);
+      vline(x + 11, yTop - 7, yTop - 9.5, wht, 1.2);
+      vline(x + 11, yTop - 12.5, yTop - 15, wht, 1.2);
+      circle(x + 3, cy, 2, teal, true);
+      circle(x + 19, cy, 2, teal, true);
+    }
+  }
+  function sectionTitle(kind, title) {
+    ensure(58); // título + primera fila de la tabla juntos
+    var yTop = cur.y;
+    drawIcon(kind, ML, yTop);
+    txt(ML + 30, yTop - 17, title, 'F2', 15, PDF_C.dark);
+    cur.y = yTop - 30;
+  }
+  // cols: [{w, label, r}]  r=true alinea a la derecha
+  // rows: celdas {t} | {t, bar, label} (mini barra de avance) | {t, center}
+  // total: fila de totales (opcional) con borde superior naranja
+  function table(cols, rows, total) {
+    var headerH = 24, rowH = 22;
+    ensure(headerH);
+    var yTop = cur.y;
+    fillRect(ML, yTop - headerH, CW, headerH, PDF_C.teal);
+    var x = ML;
+    cols.forEach(function (c) {
+      if (c.r) txtR(x + c.w - 10, yTop - 16, c.label, 'F2', 9.5, PDF_C.white);
+      else txt(x + 10, yTop - 16, c.label, 'F2', 9.5, PDF_C.white);
+      x += c.w;
+    });
+    cur.y = yTop - headerH;
+    rows.forEach(function (r, ri) {
+      ensure(rowH);
+      var ry = cur.y;
+      if (ri % 2 === 1) fillRect(ML, ry - rowH, CW, rowH, PDF_C.alt);
+      hline(ML, ML + CW, ry - rowH, PDF_C.border, 0.5);
+      var x2 = ML;
+      r.forEach(function (cell, ci) {
+        var col = cols[ci];
+        if (cell.center) {
+          txtC(ML, CW, ry - 15, cell.t, 'F3', 10.5, PDF_C.gray);
+        } else if (cell.bar != null) {
+          var bw = 70;
+          fillRect(x2 + 10, ry - 15, bw, 7, PDF_C.track);
+          if (cell.bar > 0) fillRect(x2 + 10, ry - 15, bw * Math.min(100, cell.bar) / 100, 7, PDF_C.orange);
+          txt(x2 + 10 + bw + 6, ry - 15, cell.label, 'F1', 10, PDF_C.dark);
+        } else {
+          var str = truncateToWidth(cell.t, col.w - 20, 10.5);
+          if (col.r) txtR(x2 + col.w - 10, ry - 15, str, cell.bold ? 'F2' : 'F1', 10.5, PDF_C.dark);
+          else txt(x2 + 10, ry - 15, str, cell.bold ? 'F2' : 'F1', 10.5, PDF_C.dark);
+        }
+        x2 += col.w;
+      });
+      cur.y = ry - rowH;
+    });
+    if (total) {
+      ensure(24);
+      var ty = cur.y;
+      hline(ML, ML + CW, ty, PDF_C.orange, 1.5);
+      hline(ML, ML + CW, ty - 24, PDF_C.border, 0.5);
+      var x3 = ML;
+      total.forEach(function (cell, ci) {
+        var col = cols[ci];
+        if (col.r) txtR(x3 + col.w - 10, ty - 16, cell.t, 'F2', 10.5, PDF_C.dark);
+        else txt(x3 + 10, ty - 16, cell.t, 'F2', 10.5, PDF_C.dark);
+        x3 += col.w;
+      });
+      cur.y = ty - 24;
+    }
+    cur.y -= 6;
+  }
+  function emptyRow(nCols) {
+    var cells = [{ t: 'Sin registros', center: true }];
+    for (var i = 1; i < nCols; i++) cells.push({ t: '' });
+    return [cells];
+  }
+
+  newPage(true);
+  // Encabezado
+  fillRect(0, 752, W, 90, PDF_C.teal);
+  txt(ML, 818, 'R E P O R T E   D E   V I A J E', 'F2', 10, PDF_C.kicker);
+  txt(ML, 792, 'Control de Gastos de Viaje', 'F2', 22, PDF_C.white);
+  txt(ML, 770, truncateToWidth(trip.nombre || 'Viaje', CW, 13), 'F1', 13, PDF_C.light);
+  fillRect(0, 748, W, 4, PDF_C.orange);
+  // Tarjeta de datos
+  var metaTop = 722, metaH = 46;
+  fillRect(ML, metaTop - metaH, CW, metaH, PDF_C.meta);
+  fillRect(ML, metaTop - metaH, 4, metaH, PDF_C.orange);
+  var metaCols = [
+    ['DESTINO', trip.destino || 'Sin destino', ML + 18, 150],
+    ['PERIODO', fmtDateShort(trip.inicio) + ' - ' + fmtDateShort(trip.fin), ML + 190, 190],
+    ['MONEDA', trip.moneda || 'MXN', ML + 392, 90]
+  ];
+  metaCols.forEach(function (mc) {
+    txt(mc[2], metaTop - 18, mc[0], 'F2', 8, PDF_C.gray);
+    txt(mc[2], metaTop - 36, truncateToWidth(mc[1], mc[3], 12), 'F2', 12, PDF_C.dark);
+  });
+  // Tarjetas de totales
+  var kpiTop = metaTop - metaH - 14, kpiH = 56, kpiW = CW / 3;
+  var kpis = [
+    ['PRESUPUESTADO', money(s.budgetTotal, trip.moneda), PDF_C.dark],
+    ['GASTADO', money(s.spentTotal, trip.moneda), PDF_C.dark],
+    ['RESTANTE', money(s.remaining, trip.moneda), PDF_C.orange]
+  ];
+  kpis.forEach(function (k, i) {
+    var x = ML + i * kpiW;
+    strokeRect(x, kpiTop - kpiH, kpiW, kpiH, PDF_C.border, 0.75);
+    txt(x + 14, kpiTop - 20, k[0], 'F2', 8, PDF_C.gray);
+    txt(x + 14, kpiTop - 44, truncateToWidth(k[1], kpiW - 28, 20), 'F2', 20, k[2]);
+  });
+  // Barra de avance
+  var barTop = kpiTop - kpiH - 18;
+  fillRect(ML, barTop - 8, 400, 8, PDF_C.track);
+  var pct = Math.max(0, Math.min(100, s.pct));
+  if (pct > 0) fillRect(ML, barTop - 8, 400 * pct / 100, 8, PDF_C.orange);
+  txt(ML + 412, barTop - 8, s.pct + '% usado', 'F2', 10, PDF_C.dark);
+  cur.y = barTop - 8 - 24;
+  // Por categoría
+  sectionTitle('grid', 'Por categoría');
+  var catRows = [];
+  CATS.forEach(function (c) {
+    var b = s.byCat[c];
+    if (b.budget <= 0 && b.spent <= 0) return;
+    var p = b.budget > 0 ? Math.round(b.spent / b.budget * 100) : (b.spent > 0 ? 100 : 0);
+    catRows.push([{ t: c }, { t: money(b.spent, trip.moneda) }, { t: money(b.budget, trip.moneda) }, { t: '', bar: p, label: p + '%' }]);
+  });
+  table(
+    [{ w: 190, label: 'CATEGORÍA' }, { w: 100, label: 'GASTADO', r: true }, { w: 100, label: 'PRESUPUESTO', r: true }, { w: 109, label: 'AVANCE' }],
+    catRows.length ? catRows : emptyRow(4),
+    catRows.length ? [{ t: 'Total' }, { t: money(s.spentTotal, trip.moneda) }, { t: money(s.budgetTotal, trip.moneda) }, { t: s.pct + '%' }] : null
+  );
+  // Por persona
+  sectionTitle('person', 'Por persona');
+  var personRows = s.byPerson.map(function (p) {
+    return [{ t: p.name }, { t: money(p.total, trip.moneda) }];
+  });
+  table(
+    [{ w: 299, label: 'PERSONA' }, { w: 200, label: 'GASTADO', r: true }],
+    personRows.length ? personRows : emptyRow(2),
+    null
+  );
+  // Por día
+  sectionTitle('calendar', 'Por día');
+  var dayMap = {};
+  (s.byDay || []).forEach(function (d) { dayMap[d.fecha] = d.total; });
+  var dayRows = tripDays(trip, s).map(function (d) {
+    return [{ t: fmtDateShort(d) }, { t: money(dayMap[d] || 0, trip.moneda) }];
+  });
+  table(
+    [{ w: 299, label: 'FECHA' }, { w: 200, label: 'GASTADO', r: true }],
+    dayRows.length ? dayRows : emptyRow(2),
+    null
+  );
+  // Facturación
+  sectionTitle('receipt', 'Facturación');
+  table(
+    [{ w: 299, label: 'CONCEPTO' }, { w: 200, label: 'MONTO', r: true }],
+    [
+      [{ t: 'Facturable' }, { t: money(s.facturableTotal, trip.moneda) }],
+      [{ t: 'Facturado' }, { t: money(s.invoicedTotal, trip.moneda) }],
+      [{ t: 'Pendiente por facturar' }, { t: money(s.pendingTotal, trip.moneda) }],
+      [{ t: 'No facturable' }, { t: money(s.noFacturableTotal, trip.moneda) }]
+    ],
+    null
+  );
+  // Gastos reales
+  sectionTitle('ticket', 'Gastos reales');
+  var expRows = (trip.expenses || []).slice().sort(function (a, b) { return (a.fecha || '').localeCompare(b.fecha || ''); }).map(function (e) {
+    return [
+      { t: fmtDateShort(e.fecha) },
+      { t: e.concepto || 'Gasto' },
+      { t: e.categoria || '' },
+      { t: displayPersonName(trip, e) },
+      { t: money(+e.monto || 0, trip.moneda) }
+    ];
+  });
+  table(
+    [{ w: 80, label: 'FECHA' }, { w: 149, label: 'CONCEPTO' }, { w: 90, label: 'CATEGORÍA' }, { w: 90, label: 'PERSONA' }, { w: 90, label: 'MONTO', r: true }],
+    expRows.length ? expRows : emptyRow(5),
+    null
+  );
+  // Armado del PDF (igual estructura que antes, con una fuente más)
+  var objs = [];
+  objs[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+  var kidRefs = [];
+  var nextId = 6;
+  var genStamp = 'Generado el ' + fmtDateTime(Date.now()) + ' · Control de Gastos de Viaje';
+  pages.forEach(function (pg, pi) {
+    var contentId = nextId++, pageId = nextId++;
+    var cs = pg.ops.join('\n') + '\n';
+    cs += rg(PDF_C.border) + ' RG 0.5 w ' + ML + ' 44 m ' + (ML + CW) + ' 44 l S\n';
+    cs += 'BT /F1 9 Tf ' + rg(PDF_C.gray) + ' rg ' + ML + ' 28 Td (' + pdfText(genStamp) + ') Tj ET\n';
+    cs += 'BT /F1 9 Tf ' + rg(PDF_C.gray) + ' rg ' + n1(ML + CW - textWidth('Página ' + (pi + 1), 9)) + ' 28 Td (' + pdfText('Página ' + (pi + 1)) + ') Tj ET\n';
+    objs[contentId] = '<< /Length ' + pdfBytes(cs).length + ' >>\nstream\n' + cs + '\nendstream';
+    objs[pageId] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + W + ' ' + H + '] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents ' + contentId + ' 0 R >>';
+    kidRefs.push(pageId + ' 0 R');
+  });
+  objs[2] = '<< /Type /Pages /Kids [' + kidRefs.join(' ') + '] /Count ' + pages.length + ' >>';
+  objs[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+  objs[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+  objs[5] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>';
+  var pdf = '%PDF-1.4\n';
+  var offsets = [0];
+  for (var i = 1; i < nextId; i++) {
+    offsets[i] = pdfBytes(pdf).length;
+    pdf += i + ' 0 obj\n' + objs[i] + '\nendobj\n';
+  }
+  var xrefPos = pdfBytes(pdf).length;
+  var n = nextId;
+  pdf += 'xref\n0 ' + n + '\n';
+  pdf += '0000000000 65535 f \n';
+  for (var j = 1; j < n; j++) {
+    pdf += ('0000000000' + offsets[j]).slice(-10) + ' 00000 n \n';
+  }
+  pdf += 'trailer\n<< /Size ' + n + ' /Root 1 0 R >>\nstartxref\n' + xrefPos + '\n%%EOF';
+  return new Blob([pdfBytes(pdf)], { type: 'application/pdf' });
+}
+
+// ---- Excel (.xlsx) sin dependencias ----
+// Un .xlsx es un ZIP de partes XML. Se usan entradas almacenadas (sin
+// compresión, método 0, que Excel y Sheets aceptan) con CRC32 propio y
+// cadenas inline (t="inlineStr") para no necesitar sharedStrings.
+// Colores Lapi: encabezados con fondo #00879e y texto blanco; el total
+// lleva borde superior naranja #e07000 y el restante va en naranja.
+function crc32(bytes) {
+  var table = crc32.table;
+  if (!table) {
+    table = crc32.table = new Int32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c;
+    }
+  }
+  var crc = 0xFFFFFFFF;
+  for (var i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+function xmlEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function zipStored(files) {
+  var out = [];
+  var central = [];
+  function u16(n) { out.push(n & 0xFF, (n >> 8) & 0xFF); }
+  function u32(n) { out.push(n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF, (n >> 24) & 0xFF); }
+  files.forEach(function (f) {
+    var nameBytes = new TextEncoder().encode(f.name);
+    var offset = out.length;
+    var crc = crc32(f.data);
+    out.push(0x50, 0x4B, 0x03, 0x04);
+    u16(20); u16(0x0800); u16(0); u16(0); u16(0);
+    u32(crc); u32(f.data.length); u32(f.data.length);
+    u16(nameBytes.length); u16(0);
+    for (var i = 0; i < nameBytes.length; i++) out.push(nameBytes[i]);
+    for (var j = 0; j < f.data.length; j++) out.push(f.data[j]);
+    central.push({ name: nameBytes, crc: crc, size: f.data.length, offset: offset });
+  });
+  var cdStart = out.length;
+  central.forEach(function (c) {
+    out.push(0x50, 0x4B, 0x01, 0x02);
+    u16(20); u16(20); u16(0x0800); u16(0); u16(0); u16(0);
+    u32(c.crc); u32(c.size); u32(c.size);
+    u16(c.name.length); u16(0); u16(0); u16(0); u16(0); u32(0); u32(c.offset);
+    for (var i = 0; i < c.name.length; i++) out.push(c.name[i]);
+  });
+  var cdSize = out.length - cdStart;
+  out.push(0x50, 0x4B, 0x05, 0x06);
+  u16(0); u16(0); u16(central.length); u16(central.length); u32(cdSize); u32(cdStart); u16(0);
+  return new Uint8Array(out);
+}
+// Estilos: 0 normal · 1 encabezado · 2 renglón · 3 renglón alternado ·
+// 4 monto · 5 monto alternado · 6 total · 7 total monto · 8 título ·
+// 9 negrita · 10 monto simple · 11 monto negrita · 12 monto naranja negrita
+var XLSX_STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+  '<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts>' +
+  '<fonts count="5">' +
+  '<font><sz val="11"/><name val="Calibri"/></font>' +
+  '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>' +
+  '<font><b/><sz val="11"/><name val="Calibri"/></font>' +
+  '<font><b/><sz val="11"/><color rgb="FFE07000"/><name val="Calibri"/></font>' +
+  '<font><b/><sz val="14"/><color rgb="FF111827"/><name val="Calibri"/></font>' +
+  '</fonts>' +
+  '<fills count="5">' +
+  '<fill><patternFill patternType="none"/></fill>' +
+  '<fill><patternFill patternType="gray125"/></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FF00879E"/><bgColor rgb="FF00879E"/></patternFill></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FFF5F5F5"/><bgColor rgb="FFF5F5F5"/></patternFill></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FFEAF4F6"/><bgColor rgb="FFEAF4F6"/></patternFill></fill>' +
+  '</fills>' +
+  '<borders count="3">' +
+  '<border><left/><right/><top/><bottom/><diagonal/></border>' +
+  '<border><left/><right/><top/><bottom style="thin"><color rgb="FFE5E7EB"/></bottom><diagonal/></border>' +
+  '<border><left/><right/><top style="medium"><color rgb="FFE07000"/></top><bottom style="thin"><color rgb="FFE5E7EB"/></bottom><diagonal/></border>' +
+  '</borders>' +
+  '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+  '<cellXfs count="13">' +
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+  '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>' +
+  '<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>' +
+  '<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>' +
+  '<xf numFmtId="164" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>' +
+  '<xf numFmtId="0" fontId="2" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1"/>' +
+  '<xf numFmtId="164" fontId="2" fillId="0" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>' +
+  '<xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+  '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+  '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+  '<xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>' +
+  '<xf numFmtId="164" fontId="3" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>' +
+  '</cellXfs>' +
+  '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+  '</styleSheet>';
+function xlsxSheet(cols, rows) {
+  var x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>';
+  cols.forEach(function (c, i) {
+    x += '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + c + '" customWidth="1"/>';
+  });
+  x += '</cols><sheetData>';
+  rows.forEach(function (row, ri) {
+    x += '<row r="' + (ri + 1) + '">';
+    row.forEach(function (cell, ci) {
+      var ref = String.fromCharCode(65 + ci) + (ri + 1);
+      var st = (cell.s != null) ? ' s="' + cell.s + '"' : '';
+      if (cell.t === 'n') x += '<c r="' + ref + '"' + st + '><v>' + cell.v + '</v></c>';
+      else x += '<c r="' + ref + '" t="inlineStr"' + st + '><is><t xml:space="preserve">' + xmlEsc(cell.v) + '</t></is></c>';
+    });
+    x += '</row>';
+  });
+  return x + '</sheetData></worksheet>';
+}
+function S(v, s) { return { t: 's', v: v, s: s }; }
+function N(v, s) { return { t: 'n', v: (+v || 0), s: s }; }
+function buildXlsx(trip, s) {
+  var enc = new TextEncoder();
+  // --- Resumen ---
+  var resumen = [
+    [S('Control de Gastos de Viaje', 8)],
+    [S(trip.nombre || 'Viaje', 9)],
+    [],
+    [S('Destino'), S(trip.destino || 'Sin destino', 9)],
+    [S('Periodo'), S(fmtDateShort(trip.inicio) + ' al ' + fmtDateShort(trip.fin), 9)],
+    [S('Moneda'), S(trip.moneda || 'MXN', 9)],
+    [S('Presupuestado'), N(s.budgetTotal, 11)],
+    [S('Gastado'), N(s.spentTotal, 11)],
+    [S('Restante'), N(s.remaining, 12)],
+    [S('Usado'), S(s.pct + '%', 9)],
+    [S('Pendiente por facturar'), N(s.pendingTotal, 11)],
+    [],
+    [S('Gasto por día', 9)],
+    [S('Fecha', 1), S('Gastado', 1)]
+  ];
+  var dayMap = {};
+  (s.byDay || []).forEach(function (d) { dayMap[d.fecha] = d.total; });
+  var days = tripDays(trip, s);
+  days.forEach(function (d, i) {
+    var alt = i % 2 === 1;
+    resumen.push([S(fmtDateShort(d), alt ? 3 : 2), N(dayMap[d] || 0, alt ? 5 : 4)]);
+  });
+  if (!days.length) resumen.push([S('Sin registros', 2), N(0, 4)]);
+  // --- Presupuesto ---
+  var pres = [[S('Categoría', 1), S('Gastado', 1), S('Presupuesto', 1), S('Diferencia', 1), S('% usado', 1)]];
+  var pi = 0;
+  CATS.forEach(function (c) {
+    var b = s.byCat[c];
+    if (b.budget <= 0 && b.spent <= 0) return;
+    var alt = pi % 2 === 1;
+    var p = b.budget > 0 ? Math.round(b.spent / b.budget * 100) : (b.spent > 0 ? 100 : 0);
+    pres.push([S(c, alt ? 3 : 2), N(b.spent, alt ? 5 : 4), N(b.budget, alt ? 5 : 4), N(b.budget - b.spent, alt ? 5 : 4), S(p + '%', alt ? 3 : 2)]);
+    pi++;
+  });
+  pres.push([S('Total', 6), N(s.spentTotal, 7), N(s.budgetTotal, 7), N(s.budgetTotal - s.spentTotal, 7), S(s.pct + '%', 6)]);
+  // --- Gastos ---
+  var gastos = [[S('Fecha', 1), S('Categoría', 1), S('Concepto', 1), S('Persona', 1), S('Monto', 1), S('Facturable', 1), S('Folio', 1), S('Estado factura', 1)]];
+  var exps = (trip.expenses || []).slice().sort(function (a, b) { return (a.fecha || '').localeCompare(b.fecha || ''); });
+  exps.forEach(function (e, i) {
+    var alt = i % 2 === 1;
+    gastos.push([
+      S(fmtDateShort(e.fecha), alt ? 3 : 2),
+      S(e.categoria || '', alt ? 3 : 2),
+      S(e.concepto || 'Gasto', alt ? 3 : 2),
+      S(displayPersonName(trip, e), alt ? 3 : 2),
+      N(+e.monto || 0, alt ? 5 : 4),
+      S(e.facturable ? 'Sí' : 'No', alt ? 3 : 2),
+      S(e.folio || '', alt ? 3 : 2),
+      S(estadoFactura(e), alt ? 3 : 2)
+    ]);
+  });
+  gastos.push([S('Total', 6), S('', 6), S('', 6), S('', 6), N(s.spentTotal, 7), S('', 6), S('', 6), S('', 6)]);
+  // --- Personas ---
+  var personas = [[S('Persona', 1), S('Gastado', 1), S('Nº de gastos', 1), S('Pendiente por facturar', 1)]];
+  var pendByPerson = {};
+  (trip.expenses || []).forEach(function (e) {
+    if (e.facturable && !esFacturado(e)) {
+      var k = displayPersonName(trip, e);
+      pendByPerson[k] = (pendByPerson[k] || 0) + (+e.monto || 0);
+    }
+  });
+  s.byPerson.forEach(function (p, i) {
+    var alt = i % 2 === 1;
+    personas.push([S(p.name, alt ? 3 : 2), N(p.total, alt ? 5 : 4), N(p.count, alt ? 3 : 2), N(pendByPerson[p.name] || 0, alt ? 5 : 4)]);
+  });
+  personas.push([S('Total', 6), N(s.spentTotal, 7), N((trip.expenses || []).length, 6), N(s.pendingTotal, 7)]);
+  // --- Facturación ---
+  var b = trip.billing || {};
+  var fact = [[S('Datos de facturación', 8)]];
+  var bRows = [];
+  if (b.razon) bRows.push(['Razón social', b.razon]);
+  if (b.rfc) bRows.push(['RFC', b.rfc]);
+  if (b.regimen) bRows.push(['Régimen fiscal', b.regimen]);
+  if (b.cp) bRows.push(['Código postal', b.cp]);
+  if (b.uso) bRows.push(['Uso de CFDI', b.uso]);
+  if (b.correo) bRows.push(['Correo', b.correo]);
+  if (!bRows.length) fact.push([S('Sin datos de facturación capturados')]);
+  bRows.forEach(function (r) { fact.push([S(r[0]), S(r[1], 9)]); });
+  fact.push([]);
+  fact.push([S('Gastos facturables', 9)]);
+  fact.push([S('Fecha', 1), S('Concepto', 1), S('Persona', 1), S('Monto', 1), S('Estado', 1)]);
+  var fb = (trip.expenses || []).filter(function (e) { return e.facturable; })
+    .sort(function (a, b2) { return (a.fecha || '').localeCompare(b2.fecha || ''); });
+  fb.forEach(function (e, i) {
+    var alt = i % 2 === 1;
+    fact.push([
+      S(fmtDateShort(e.fecha), alt ? 3 : 2),
+      S(e.concepto || 'Gasto', alt ? 3 : 2),
+      S(displayPersonName(trip, e), alt ? 3 : 2),
+      N(+e.monto || 0, alt ? 5 : 4),
+      S(estadoFactura(e), alt ? 3 : 2)
+    ]);
+  });
+  fact.push([S('Total', 6), S('', 6), S('', 6), N(s.facturableTotal, 7), S('', 6)]);
+  // --- Armar el ZIP ---
+  var sheets = [
+    { name: 'Resumen', cols: [22, 20], rows: resumen },
+    { name: 'Presupuesto', cols: [20, 14, 14, 14, 10], rows: pres },
+    { name: 'Gastos', cols: [14, 16, 34, 18, 14, 11, 20, 20], rows: gastos },
+    { name: 'Personas', cols: [24, 14, 12, 22], rows: personas },
+    { name: 'Facturación', cols: [18, 34, 18, 14, 12], rows: fact }
+  ];
+  var ct = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    sheets.map(function (sh, i) {
+      return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+    }).join('') +
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+    '</Types>';
+  var rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+    '</Relationships>';
+  var wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
+    sheets.map(function (sh, i) {
+      return '<sheet name="' + xmlEsc(sh.name) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>';
+    }).join('') +
+    '</sheets></workbook>';
+  var wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    sheets.map(function (sh, i) {
+      return '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>';
+    }).join('') +
+    '<Relationship Id="rId' + (sheets.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+    '</Relationships>';
+  var files = [
+    { name: '[Content_Types].xml', data: enc.encode(ct) },
+    { name: '_rels/.rels', data: enc.encode(rels) },
+    { name: 'xl/workbook.xml', data: enc.encode(wb) },
+    { name: 'xl/_rels/workbook.xml.rels', data: enc.encode(wbRels) },
+    { name: 'xl/styles.xml', data: enc.encode(XLSX_STYLES) }
+  ];
+  sheets.forEach(function (sh, i) {
+    files.push({ name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: enc.encode(xlsxSheet(sh.cols, sh.rows)) });
+  });
+  return new Blob([zipStored(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+function capPlugins() {
+  try { return (window.Capacitor && Capacitor.Plugins) ? Capacitor.Plugins : null; } catch (e) { return null; }
+}
+function isNativeApp() {
+  try { return !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()); } catch (e) { return false; }
+}
+function blobToBase64(blob) {
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var res = String(reader.result || '');
+      resolve(res.indexOf(',') >= 0 ? res.split(',')[1] : res);
+    };
+    reader.onerror = function () { reject(new Error('No se pudo leer el archivo.')); };
+    reader.readAsDataURL(blob);
+  });
+}
+function downloadBlob(blob, name) {
+  // Devuelve una Promise. En la app nativa (Android) el enlace de descarga
+  // con blob URL no hace nada y navigator.share con archivos tampoco está
+  // disponible en este WebView, así que se escribe el archivo con el plugin
+  // Filesystem (en caché) y se comparte con el plugin Share: se abre la
+  // hoja nativa del sistema, que sí ofrece Guardar en Drive, WhatsApp,
+  // Gmail, etc. En web se conserva el compartir del navegador y el enlace
+  // de descarga como respaldo.
+  var plugins = capPlugins();
+  if (isNativeApp() && plugins && plugins.Filesystem && plugins.Share) {
+    var Filesystem = plugins.Filesystem, Share = plugins.Share;
+    return blobToBase64(blob).then(function (b64) {
+      return Filesystem.writeFile({ path: name, data: b64, directory: 'CACHE' });
+    }).then(function (res) {
+      return Share.share({ url: res.uri, dialogTitle: name });
+    }).catch(function (err) {
+      // Si el usuario cancela la hoja ("Share canceled"), no es un error.
+      if (err && (err.name === 'AbortError' || /cancel/i.test(String(err.message || '')))) return;
+      throw err;
+    });
+  }
+  var file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
+  if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+    return navigator.share({ files: [file], title: name }).catch(function (err) {
+      // Si el usuario cancela, no hacer nada; si compartir falla por otra
+      // razón, intentar la descarga como respaldo.
+      if (err && err.name !== 'AbortError') anchorDownload(blob, name);
+    });
+  }
+  anchorDownload(blob, name);
+  return Promise.resolve();
+}
+function anchorDownload(blob, name) {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+}
+function fileBase(trip) {
+  return ('gastos-' + (trip.nombre || 'viaje')).toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+// ---- Enviar datos de facturación (WhatsApp / correo) ----
+function billingHasData(trip) {
+  var b = trip.billing || {};
+  return !!(b.razon || b.rfc || b.regimen || b.cp || b.uso || b.correo);
+}
+function billingText(trip) {
+  var b = trip.billing || {};
+  var L = [];
+  L.push('Datos de facturación');
+  if (b.razon) L.push('Razón social: ' + b.razon);
+  if (b.rfc) L.push('RFC: ' + b.rfc);
+  if (b.regimen) L.push('Régimen fiscal: ' + b.regimen);
+  if (b.cp) L.push('Código postal: ' + b.cp);
+  if (b.uso) L.push('Uso de CFDI: ' + b.uso);
+  if (b.correo) L.push('Correo: ' + b.correo);
+  return L.join('\n');
+}
+function billingSummaryHtml(trip) {
+  var b = trip.billing || {};
+  var rows = [];
+  if (b.razon) rows.push(['Razón social', b.razon]);
+  if (b.rfc) rows.push(['RFC', b.rfc]);
+  if (b.regimen) rows.push(['Régimen fiscal', b.regimen]);
+  if (b.cp) rows.push(['Código postal', b.cp]);
+  if (b.uso) rows.push(['Uso de CFDI', b.uso]);
+  if (b.correo) rows.push(['Correo', b.correo]);
+  if (!rows.length) return '<div class="empty">Aún no hay datos de facturación capturados.<br>Llena los datos arriba y guárdalos.</div>';
+  return rows.map(function (r) {
+    return '<div class="line"><span>' + esc(r[0]) + '</span><b>' + esc(r[1]) + '</b></div>';
+  }).join('');
+}
+function cleanPhone(num) {
+  var d = String(num || '').replace(/\D/g, '');
+  if (d.length === 13 && d.indexOf('521') === 0) d = '52' + d.slice(3);
+  if (d.length === 10) d = '52' + d;
+  return d;
+}
+
+// ---- Constancia de situación fiscal (PDF opcional) ----
+// Se guarda con los datos de facturación del viaje como data URL en
+// localStorage: {nombre, tamano, data}. Solo se aceptan PDF.
+var formConstancia = null;
+function fmtSize(bytes) {
+  if (bytes == null) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+function dataUrlToBlob(dataUrl) {
+  var parts = String(dataUrl).split(',');
+  var mime = (parts[0].match(/data:([^;]+)/) || [])[1] || 'application/pdf';
+  var bin = atob(parts[1] || '');
+  var bytes = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+function constanciaInfoHtml(c) {
+  if (!c) return '<div class="empty" style="padding:10px">Sin archivo adjunto.</div>';
+  return '<div class="line"><span>📄 ' + esc(c.nombre || 'constancia.pdf') + ' · ' + fmtSize(c.tamano) + '</span></div>' +
+    '<div class="actions">' +
+    '<button class="btn-dark" id="btnConstanciaVer">Ver</button>' +
+    '<button class="btn-green" id="btnConstanciaShare">Compartir constancia</button>' +
+    '<button class="btn-danger" id="btnConstanciaDel">Quitar</button></div>';
+}
+function renderConstanciaInfo() {
+  var box = document.getElementById('constanciaInfo');
+  if (!box) return;
+  box.innerHTML = constanciaInfoHtml(formConstancia);
+  var v = document.getElementById('btnConstanciaVer');
+  if (v) v.addEventListener('click', openConstancia);
+  var s = document.getElementById('btnConstanciaShare');
+  if (s) s.addEventListener('click', shareConstancia);
+  var d = document.getElementById('btnConstanciaDel');
+  if (d) d.addEventListener('click', function () {
+    formConstancia = null;
+    var inp = document.getElementById('fConstancia');
+    if (inp) inp.value = '';
+    renderConstanciaInfo();
+  });
+}
+function openConstancia() {
+  if (!formConstancia || !formConstancia.data) return;
+  var url = URL.createObjectURL(dataUrlToBlob(formConstancia.data));
+  window.open(url, '_blank');
+  setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+}
+function shareConstancia() {
+  if (!formConstancia || !formConstancia.data) return;
+  downloadBlob(dataUrlToBlob(formConstancia.data), formConstancia.nombre || 'constancia.pdf')
+    .catch(function () { openConstancia(); });
+}
+
+// ---- Render ----
+var currentTab = 'resumen';
+var currentView = 'home';
+var filterPerson = '';
+var pendingPhoto = null;
+
+function fillCatSelect(el) {
+  el.innerHTML = CATS.map(function (c) { return '<option>' + c + '</option>'; }).join('');
+}
+function fillPersonSelects(trip) {
+  var opts = '<option value="">Compartido</option>' + (trip.people || []).map(function (p) {
+    return '<option value="' + p.id + '">' + esc(p.nombre) + '</option>';
+  }).join('');
+  var eSel = document.getElementById('ePersona');
+  eSel.innerHTML = opts;
+  // Las opciones por persona solo se muestran con 2 o más personas;
+  // con 0 o 1 persona el gasto queda como "Compartido" y no se muestran.
+  var multi = (trip.people || []).length >= 2;
+  eSel.disabled = !multi;
+  if (!multi) { eSel.value = ''; filterPerson = ''; }
+  document.getElementById('ePersonaField').style.display = multi ? '' : 'none';
+  document.getElementById('fPersonaField').style.display = multi ? '' : 'none';
+  document.getElementById('fPersona').innerHTML = '<option value="">Todas las personas</option><option value="__compartido">Compartido</option>' + opts.replace('<option value="">Compartido</option>', '');
+}
+
+function render() {
+  var trip = activeTrip();
+  var sel = document.getElementById('tripSelect');
+  sel.innerHTML = state.trips.map(function (t) {
+    return '<option value="' + t.id + '"' + (t.id === state.activeTripId ? ' selected' : '') + '>' +
+      esc(t.nombre) + (t.destino ? ' · ' + esc(t.destino) : '') + '</option>';
+  }).join('');
+  document.getElementById('homeView').classList.toggle('hidden', currentView !== 'home');
+  document.getElementById('tripView').classList.toggle('hidden', currentView !== 'trip');
+  if (currentView === 'home') { renderHome(); return; }
+  document.getElementById('noTrip').classList.toggle('hidden', !!trip);
+  document.getElementById('tripBody').classList.toggle('hidden', !trip);
+  if (!trip) return;
+  fillCatSelect(document.getElementById('bCat'));
+  fillCatSelect(document.getElementById('eCat'));
+  fillPersonSelects(trip);
+  document.getElementById('fPersona').value = filterPerson;
+  var s = computeSummary(trip);
+  document.getElementById('sBudget').textContent = money(s.budgetTotal, trip.moneda);
+  document.getElementById('sSpent').textContent = money(s.spentTotal, trip.moneda);
+  var left = document.getElementById('sLeft');
+  left.textContent = money(s.remaining, trip.moneda);
+  left.classList.toggle('neg', s.remaining < 0);
+  document.getElementById('sPct').textContent = s.pct + '%';
+  renderResumen(trip, s);
+  renderBudget(trip, s);
+  renderExpenses(trip, s);
+  renderPeople(trip, s);
+  renderBilling(trip, s);
+  renderReport(trip, s);
+}
+
+function tripCardHtml(t, archived, draft) {
+  var s = computeSummary(t);
+  var actions;
+  if (draft) {
+    actions = '<div class="actions"><button class="btn-green" data-open-draft="' + t.id + '" style="flex:1">Abrir</button>' +
+      '<button class="btn-danger" data-del-trip="' + t.id + '">Eliminar</button></div>';
+  } else {
+    actions = '<div class="actions"><button class="btn-green" data-open-trip="' + t.id + '" style="flex:1">Abrir</button>';
+    if (archived) {
+      actions += '<button class="btn-dark" data-unarchive-trip="' + t.id + '">Restaurar</button>';
+    } else {
+      actions += '<button class="btn-ghost" data-export-trip="' + t.id + '">Exportar CSV</button>' +
+        '<button class="btn-ghost" data-archive-trip="' + t.id + '">Archivar</button>';
+    }
+    actions += '<button class="btn-danger" data-del-trip="' + t.id + '">Eliminar</button></div>';
+  }
+  return '<div class="card"><h2>' + esc(t.nombre) + '</h2>' +
+    '<div class="sub">' + esc(t.destino || 'Sin destino') + ' · ' + fmtDateShort(t.inicio) + ' al ' + fmtDateShort(t.fin) + '</div>' +
+    '<div class="line"><span>Presupuestado</span><b>' + money(s.budgetTotal, t.moneda) + '</b></div>' +
+    '<div class="line"><span>Gastado</span><b>' + money(s.spentTotal, t.moneda) + '</b></div>' +
+    actions + '</div>';
+}
+function renderHome() {
+  var vista = state.vistaGastos === 'unificada' ? 'unificada' : 'viaje';
+  document.getElementById('btnVistaViaje').className = vista === 'viaje' ? 'btn-dark' : 'btn-ghost';
+  document.getElementById('btnVistaUnificada').className = vista === 'unificada' ? 'btn-dark' : 'btn-ghost';
+  var box = document.getElementById('homeList');
+  var ubox = document.getElementById('unifiedList');
+  box.classList.toggle('hidden', vista !== 'viaje');
+  ubox.classList.toggle('hidden', vista !== 'unificada');
+  if (vista === 'unificada') { renderUnified(); return; }
+  var active = state.trips.filter(function (t) { return !t.archived && t.paraDespues !== true; });
+  var drafts = state.trips.filter(function (t) { return !t.archived && t.paraDespues === true; });
+  var archived = state.trips.filter(function (t) { return t.archived; });
+  var h = '';
+  if (!active.length && !drafts.length) {
+    h += '<div class="empty">Aún no hay viajes guardados.<br>Crea tu primer viaje con el botón de arriba.</div>';
+  } else {
+    h += active.map(function (t) { return tripCardHtml(t, false); }).join('');
+  }
+  if (drafts.length) {
+    h += '<details class="card"><summary style="font-weight:700;color:#0C322C;cursor:pointer">Para después (' + drafts.length + ')</summary>' +
+      '<div style="margin-top:10px">' + drafts.map(function (t) { return tripCardHtml(t, false, true); }).join('') + '</div></details>';
+  }
+  if (archived.length) {
+    h += '<details class="card"><summary style="font-weight:700;color:#0C322C;cursor:pointer">Archivados (' + archived.length + ')</summary>' +
+      '<div style="margin-top:10px">' + archived.map(function (t) { return tripCardHtml(t, true); }).join('') + '</div></details>';
+  }
+  box.innerHTML = h;
+}
+// ---- Vista unificada: todos los gastos de todos los viajes no archivados ----
+function renderUnified() {
+  var box = document.getElementById('unifiedList');
+  var rows = [];
+  state.trips.filter(function (t) { return !t.archived && t.paraDespues !== true; }).forEach(function (t) {
+    (t.expenses || []).forEach(function (e) { rows.push({ trip: t, e: e }); });
+  });
+  rows.sort(function (a, b) { return (b.e.fecha || '').localeCompare(a.e.fecha || ''); });
+  if (!rows.length) {
+    box.innerHTML = '<div class="empty">Aún no hay gastos registrados en ningún viaje.</div>';
+    return;
+  }
+  var totals = {};
+  rows.forEach(function (r) {
+    var cur = r.trip.moneda || 'MXN';
+    totals[cur] = (totals[cur] || 0) + (+r.e.monto || 0);
+  });
+  // money() no siempre incluye el código (MXN sale como "$950.00"); se agrega
+  // para que el total de cada moneda sea inconfundible.
+  var totalTxt = Object.keys(totals).sort().map(function (cur) {
+    var txt = money(totals[cur], cur);
+    return txt.indexOf(cur) === -1 ? txt + ' ' + cur : txt;
+  }).join(' · ');
+  var h = '<div class="card"><div class="line"><span>' + rows.length + (rows.length === 1 ? ' gasto' : ' gastos') + ' en total</span><b>' + totalTxt + '</b></div></div>';
+  h += rows.map(function (r) {
+    var e = r.e, t = r.trip;
+    var badge = e.facturable
+      ? (esFacturado(e) ? '<span class="badge b-green">Facturado</span>' : '<span class="badge b-amber">Pendiente por facturar</span>')
+      : '<span class="badge b-gray">No facturable</span>';
+    return '<div class="item" data-open-trip="' + t.id + '" style="cursor:pointer"><div class="top"><b>' + esc(e.concepto || 'Gasto') + '</b>' +
+      '<span class="amt">' + money(+e.monto || 0, t.moneda) + '</span></div>' +
+      '<div class="meta">' + fmtDateShort(e.fecha) + ' · ' + esc(t.nombre) + '</div>' +
+      '<div class="meta">' + esc(e.categoria) + ' · ' + esc(displayPersonName(t, e)) + '</div>' +
+      '<div class="meta">' + badge + (e.folio ? ' · Folio: ' + esc(e.folio) : '') + '</div></div>';
+  }).join('');
+  box.innerHTML = h;
+}
+function deleteTrip(id) {
+  var trip = state.trips.find(function (t) { return t.id === id; });
+  if (!trip) return;
+  if (!confirm('¿Quitar este viaje definitivamente? Se borrarán sus gastos, presupuesto y personas.')) return;
+  state.trips = state.trips.filter(function (t) { return t.id !== id; });
+  if (state.activeTripId === id) state.activeTripId = state.trips.length ? state.trips[state.trips.length - 1].id : null;
+  save(); render();
+}
+function openTrip(id) {
+  state.activeTripId = id;
+  filterPerson = '';
+  currentView = 'trip';
+  save(); render();
+}
+function showHome() {
+  currentView = 'home';
+  render();
+}
+
+function renderResumen(trip, s) {
+  var h = '<div class="card"><h3>Por categoría</h3>';
+  var anyCat = false;
+  CATS.forEach(function (c) {
+    var b = s.byCat[c];
+    if (b.budget <= 0 && b.spent <= 0) return;
+    anyCat = true;
+    var pct = b.budget > 0 ? Math.min(100, Math.round(b.spent / b.budget * 100)) : (b.spent > 0 ? 100 : 0);
+    var over = b.budget > 0 && b.spent > b.budget;
+    h += '<div class="line"><span>' + c + '</span><b class="' + (over ? 'over' : '') + '">' +
+      money(b.spent, trip.moneda) + ' / ' + money(b.budget, trip.moneda) + '</b></div>' +
+      '<div class="bar"><i class="' + (over ? 'over' : '') + '" style="width:' + pct + '%"></i></div>' +
+      (over ? '<div class="warn">Te excediste en ' + money(b.spent - b.budget, trip.moneda) + '</div>' : '');
+  });
+  h += anyCat ? '' : '<div class="empty">Sin presupuesto ni gastos por categoría todavía.</div>';
+  h += '</div>';
+  h += '<div class="card"><h3>Por persona</h3>';
+  h += s.byPerson.length ? s.byPerson.map(function (p) {
+    return '<div class="line"><span>' + esc(p.name) + ' (' + p.count + ' gastos)</span><b>' + money(p.total, trip.moneda) + '</b></div>';
+  }).join('') : '<div class="empty">Aún no hay gastos.</div>';
+  h += '</div>';
+  h += '<div class="card"><h3>Por día</h3>';
+  h += s.byDay.length ? s.byDay.map(function (d) {
+    return '<div class="line"><span>' + fmtDateShort(d.fecha) + '</span><b>' + money(d.total, trip.moneda) + '</b></div>';
+  }).join('') : '<div class="empty">Aún no hay gastos.</div>';
+  h += '</div>';
+  h += '<div class="card"><h3>Facturación</h3>' +
+    '<div class="line"><span>Facturable</span><b>' + money(s.facturableTotal, trip.moneda) + '</b></div>' +
+    '<div class="line"><span>Ya facturado</span><b>' + money(s.invoicedTotal, trip.moneda) + '</b></div>' +
+    '<div class="line"><span>Pendiente por facturar</span><b>' + money(s.pendingTotal, trip.moneda) + '</b></div>' +
+    '<div class="line"><span>No facturable</span><b>' + money(s.noFacturableTotal, trip.moneda) + '</b></div></div>';
+  document.getElementById('tab-resumen').innerHTML = h;
+}
+
+function renderBudget(trip, s) {
+  var box = document.getElementById('budgetList');
+  if (!(trip.budget || []).length) {
+    box.innerHTML = '<div class="empty">Aún no hay gastos planeados.<br>Agrega el presupuesto arriba.</div>';
+    return;
+  }
+  box.innerHTML = trip.budget.map(function (b) {
+    return '<div class="line"><span><b>' + esc(b.categoria) + '</b> · ' + esc(b.concepto) + '</span>' +
+      '<span><b>' + money(+b.monto || 0, trip.moneda) + '</b> ' +
+      '<button class="btn-danger" data-del-budget="' + b.id + '" style="padding:4px 10px">×</button></span></div>';
+  }).join('') + '<div class="line"><span><b>Total presupuestado</b></span><b>' + money(s.budgetTotal, trip.moneda) + '</b></div>';
+}
+
+function renderExpenses(trip, s) {
+  var box = document.getElementById('expenseList');
+  var list = (trip.expenses || []).slice().sort(function (a, b) { return (b.fecha || '').localeCompare(a.fecha || ''); });
+  if (filterPerson === '__compartido') list = list.filter(function (e) { return !personaDeGasto(trip, e); });
+  else if (filterPerson) list = list.filter(function (e) { var p = personaDeGasto(trip, e); return p && p.id === filterPerson; });
+  if (!list.length) {
+    box.innerHTML = '<div class="empty">No hay gastos registrados todavía.</div>';
+    return;
+  }
+  box.innerHTML = list.map(function (e) {
+    var badge = e.facturable
+      ? (esFacturado(e) ? '<span class="badge b-green">Facturado</span>' : '<span class="badge b-amber">Pendiente por facturar</span>')
+      : '<span class="badge b-gray">No facturable</span>';
+    var photo = e.foto ? '<br><img class="thumb" src="' + e.foto + '" data-photo="' + e.id + '" alt="Foto del ticket">' : '';
+    return '<div class="item"><div class="top"><b>' + esc(e.concepto || 'Gasto') + '</b>' +
+      '<span class="amt">' + money(+e.monto || 0, trip.moneda) + '</span></div>' +
+      '<div class="meta">' + fmtDateShort(e.fecha) + ' · ' + esc(e.categoria) + ' · ' + esc(displayPersonName(trip, e)) + '</div>' +
+      '<div class="meta">' + badge + (e.folio ? ' · Folio: ' + esc(e.folio) : '') + '</div>' +
+      (e.nota ? '<div class="note">' + esc(e.nota) + '</div>' : '') + photo +
+      '<div class="actions">' + (e.facturable && !esFacturado(e) ? '<button class="btn-dark" data-subir-factura="' + e.id + '" style="padding:6px 10px">Subir factura</button>' : '') +
+      '<button class="btn-danger" data-del-exp="' + e.id + '" style="padding:6px 10px">Eliminar</button></div></div>';
+  }).join('');
+}
+
+function renderPeople(trip, s) {
+  var box = document.getElementById('peopleList');
+  var perPerson = {};
+  s.byPerson.forEach(function (p) { perPerson[p.name] = p; });
+  if (!(trip.people || []).length) {
+    box.innerHTML = '<div class="empty">Viajas solo o aún no agregas personas.<br>Los gastos sin persona quedan como “Compartido”.</div>';
+    return;
+  }
+  box.innerHTML = trip.people.map(function (p) {
+    var tot = perPerson[p.nombre] || { total: 0, count: 0 };
+    var pend = (trip.expenses || []).filter(function (e) { var ep = personaDeGasto(trip, e); return ep && ep.id === p.id && e.facturable && !esFacturado(e); })
+      .reduce(function (a, e) { return a + (+e.monto || 0); }, 0);
+    return '<div class="item"><div class="top"><b>' + esc(p.nombre) + '</b>' +
+      '<span class="amt">' + money(tot.total, trip.moneda) + '</span></div>' +
+      '<div class="meta">' + esc(p.rol || 'Sin rol') + ' · ' + tot.count + ' gastos · Pendiente por facturar: ' + money(pend, trip.moneda) + '</div>' +
+      (p.notas ? '<div class="note">' + esc(p.notas) + '</div>' : '') +
+      '<div class="actions"><button class="btn-danger" data-del-person="' + p.id + '" style="padding:6px 10px">Eliminar</button></div></div>';
+  }).join('');
+}
+
+// ---- Archivos de factura (PDF y XML) por gasto ----
+// Elecciones en curso (File objects) mientras el usuario arma la factura;
+// se vacía en cada renderBilling porque la lista se vuelve a pintar.
+var pendingFacturas = {};
+function updateFacNames(id) {
+  var span = document.getElementById('fac-names-' + id);
+  if (!span) return;
+  var sel = pendingFacturas[id] || {};
+  var names = [];
+  if (sel.pdf) names.push('PDF: ' + sel.pdf.name);
+  if (sel.xml) names.push('XML: ' + sel.xml.name);
+  span.textContent = names.length ? names.join(' · ') : 'Sin archivos elegidos';
+}
+function readFileAsDataURL(file) {
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function (ev) { resolve(ev.target.result); };
+    reader.onerror = function () { reject(new Error('No se pudo leer el archivo.')); };
+    reader.readAsDataURL(file);
+  });
+}
+function guardarFactura(trip, id) {
+  var ex = trip.expenses.find(function (x) { return x.id === id; });
+  if (!ex) return;
+  var sel = pendingFacturas[id] || {};
+  if (!sel.pdf) { alert('Falta elegir el archivo PDF de la factura.'); return; }
+  if (!sel.xml) { alert('Falta elegir el archivo XML de la factura.'); return; }
+  Promise.all([readFileAsDataURL(sel.pdf), readFileAsDataURL(sel.xml)]).then(function (res) {
+    ex.facturaPdf = { nombre: sel.pdf.name, tamano: sel.pdf.size, data: res[0] };
+    ex.facturaXml = { nombre: sel.xml.name, tamano: sel.xml.size, data: res[1] };
+    delete pendingFacturas[id];
+    save(); render();
+  }).catch(function () { alert('No se pudieron leer los archivos de la factura. Inténtalo de nuevo.'); });
+}
+
+function renderBilling(trip, s) {
+  var b = trip.billing || {};
+  document.getElementById('fRazon').value = b.razon || '';
+  document.getElementById('fRfc').value = b.rfc || '';
+  document.getElementById('fRegimen').value = b.regimen || '';
+  document.getElementById('fCp').value = b.cp || '';
+  document.getElementById('fUso').value = b.uso || '';
+  document.getElementById('fCorreo').value = b.correo || '';
+  document.getElementById('fSendWA').value = b.whatsapp || '';
+  document.getElementById('fSendMail').value = b.correoEnvio || b.correo || '';
+  formConstancia = (trip.billing && trip.billing.constancia) ? trip.billing.constancia : null;
+  renderConstanciaInfo();
+  // Selector para copiar datos de facturación de otro viaje (solo si hay
+  // otro viaje con razón social o RFC guardados).
+  var others = state.trips.filter(function (t) {
+    return t.id !== trip.id && t.billing && (t.billing.razon || t.billing.rfc);
+  });
+  var copyWrap = document.getElementById('copyBillingWrap');
+  var copySel = document.getElementById('selCopyBilling');
+  document.getElementById('copyBillingMsg').textContent = '';
+  if (others.length) {
+    copyWrap.style.display = '';
+    copySel.innerHTML = '<option value="">Elige un viaje…</option>' + others.map(function (t) {
+      return '<option value="' + t.id + '">' + esc(t.nombre) + (t.destino ? ' · ' + esc(t.destino) : '') + '</option>';
+    }).join('');
+  } else {
+    copyWrap.style.display = 'none';
+    copySel.innerHTML = '<option value="">Elige un viaje…</option>';
+  }
+  document.getElementById('billingSendSummary').innerHTML = billingSummaryHtml(trip);
+  pendingFacturas = {};
+  var pend = (trip.expenses || []).filter(function (e) { return e.facturable && !esFacturado(e); });
+  var inv = (trip.expenses || []).filter(function (e) { return e.facturable && esFacturado(e); });
+  document.getElementById('pendingList').innerHTML = pend.length ? pend.map(function (e) {
+    return '<div class="line"><span>' + fmtDateShort(e.fecha) + ' · ' + esc(e.concepto || 'Gasto') + ' · ' + esc(displayPersonName(trip, e)) + '</span>' +
+      '<span><b>' + money(+e.monto || 0, trip.moneda) + '</b></span></div>' +
+      '<div class="row" style="margin-top:6px"><input id="folio-' + e.id + '" placeholder="Folio / UUID de la factura">' +
+      '<button class="btn-dark" data-set-folio="' + e.id + '">Guardar folio</button></div>' +
+      '<div class="row" style="margin-top:6px">' +
+      '<div class="field" style="flex:1;margin-bottom:0"><label>Factura PDF</label><input type="file" data-fac-pdf="' + e.id + '" accept="application/pdf,.pdf"></div>' +
+      '<div class="field" style="flex:1;margin-bottom:0"><label>Factura XML</label><input type="file" data-fac-xml="' + e.id + '" accept=".xml,text/xml,application/xml"></div></div>' +
+      '<div class="row" style="margin-top:2px;align-items:center"><span class="sub" id="fac-names-' + e.id + '" style="flex:1;margin-bottom:0">Sin archivos elegidos</span>' +
+      '<button class="btn-dark" data-save-factura="' + e.id + '">Guardar factura</button></div>';
+  }).join('') : '<div class="empty">Nada pendiente por facturar.</div>';
+  document.getElementById('invoicedList').innerHTML = inv.length ? inv.map(function (e) {
+    var det = (e.folio ? 'Folio: ' + esc(e.folio) : '') +
+      (e.facturaPdf ? (e.folio ? '<br>' : '') + '📄 ' + esc(e.facturaPdf.nombre || 'factura.pdf') : '') +
+      (e.facturaXml ? '<br>📄 ' + esc(e.facturaXml.nombre || 'factura.xml') : '');
+    return '<div class="line"><span>' + fmtDateShort(e.fecha) + ' · ' + esc(e.concepto || 'Gasto') +
+      (det ? '<br><span style="color:#666;font-size:12px">' + det + '</span>' : '') + '</span>' +
+      '<b>' + money(+e.monto || 0, trip.moneda) + '</b></div>' +
+      '<div class="actions">' +
+      (e.facturaPdf ? '<button class="btn-dark" data-ver-fac-pdf="' + e.id + '" style="padding:6px 10px">Ver PDF</button>' : '') +
+      (e.facturaXml ? '<button class="btn-dark" data-ver-fac-xml="' + e.id + '" style="padding:6px 10px">Ver XML</button>' : '') +
+      ((e.facturaPdf || e.facturaXml) ? '<button class="btn-danger" data-del-factura="' + e.id + '" style="padding:6px 10px">Quitar factura</button>' : '') +
+      '</div>';
+  }).join('') : '<div class="empty">Aún no hay gastos facturados.</div>';
+}
+
+function renderReport(trip, s) {
+  var h = '<h2>Reporte: ' + esc(trip.nombre) + '</h2>' +
+    '<div class="sub">' + esc(trip.destino || '') + ' · ' + fmtDateShort(trip.inicio) + ' al ' + fmtDateShort(trip.fin) + ' · ' + trip.moneda + '</div>' +
+    '<div class="line"><span>Presupuestado</span><b>' + money(s.budgetTotal, trip.moneda) + '</b></div>' +
+    '<div class="line"><span>Gastado</span><b>' + money(s.spentTotal, trip.moneda) + '</b></div>' +
+    '<div class="line"><span>Restante</span><b>' + money(s.remaining, trip.moneda) + '</b></div>' +
+    '<div class="line"><span>Usado</span><b>' + s.pct + '%</b></div>' +
+    '<div class="line"><span>Facturable</span><b>' + money(s.facturableTotal, trip.moneda) + '</b></div>' +
+    '<div class="line"><span>Facturado</span><b>' + money(s.invoicedTotal, trip.moneda) + '</b></div>' +
+    '<div class="line"><span>Pendiente por facturar</span><b>' + money(s.pendingTotal, trip.moneda) + '</b></div>' +
+    '<div class="line"><span>No facturable</span><b>' + money(s.noFacturableTotal, trip.moneda) + '</b></div>' +
+    '<div class="line"><span>Gastos con foto de ticket</span><b>' +
+    (trip.expenses || []).filter(function (e) { return e.foto; }).length + ' de ' + (trip.expenses || []).length + '</b></div>';
+  document.getElementById('reportView').innerHTML = h;
+}
+
+// ---- Foto del ticket: reducir con canvas a máx 1024px JPEG 0.7 ----
+function handlePhotoDataUrl(dataUrl) {
+  if (!dataUrl) return;
+  var img = new Image();
+  img.onload = function () {
+    var max = 1024, w = img.width, h = img.height;
+    if (w > max || h > max) { var sc = Math.min(max / w, max / h); w = Math.round(w * sc); h = Math.round(h * sc); }
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    pendingPhoto = c.toDataURL('image/jpeg', 0.7);
+    document.getElementById('photoPreview').innerHTML =
+      '<img class="thumb" src="' + pendingPhoto + '" alt="Foto del ticket">' +
+      ' <button class="btn-ghost" id="btnPhotoDel" style="padding:6px 10px">Quitar foto</button>';
+    document.getElementById('btnPhotoDel').addEventListener('click', function () {
+      pendingPhoto = null;
+      ocrToken++;
+      document.getElementById('ocrStatus').textContent = '';
+      document.getElementById('photoPreview').innerHTML = '';
+    });
+    runTicketOcr(pendingPhoto);
+  };
+  img.src = dataUrl;
+}
+function handlePhotoFile(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function (ev) { handlePhotoDataUrl(ev.target.result); };
+  reader.readAsDataURL(file);
+}
+
+// ---- Lectura del ticket con OCR (en el teléfono, sin subir la foto) ----
+// Misma tecnología que el lector de números de serie del Checklist:
+// tesseract.js 7.0.0 en www/ocr/ con el idioma español. La librería se
+// carga solo la primera vez que se procesa una foto, nunca al arrancar.
+// Si el OCR falla o no encuentra nada útil, no pasa nada: el formulario
+// queda como estaba y se puede llenar a mano.
+var ocrToken = 0;
+var ocrScriptPromise = null;
+function loadOcrScript() {
+  if (typeof Tesseract !== 'undefined') return Promise.resolve();
+  if (ocrScriptPromise) return ocrScriptPromise;
+  ocrScriptPromise = new Promise(function (resolve, reject) {
+    var s = document.createElement('script');
+    s.src = 'ocr/tesseract.min.js';
+    s.onload = function () { resolve(); };
+    s.onerror = function () { ocrScriptPromise = null; reject(new Error('ocr-load')); };
+    document.head.appendChild(s);
+  });
+  return ocrScriptPromise;
+}
+
+// Extrae del texto del ticket: fecha, total, nombre del negocio y RFC.
+// Devuelve {fecha:'aaaa-mm-dd'|null, monto:number|null,
+// concepto:string|null, rfc:string|null}.
+// El folio del ticket NO se extrae: el folio/UUID de la factura solo lo
+// escribe él a mano (un folio o RFC de ticket no es la factura, y llenarlo
+// marcaba el gasto como "Facturado" sin haber subido la factura).
+function parseTicketText(text) {
+  var out = { fecha: null, monto: null, concepto: null, rfc: null };
+  var raw = String(text || '');
+  if (!raw.trim()) return out;
+  var lines = raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) { return l; });
+
+  // Fecha: dd/mm/aaaa, dd-mm-aaaa o dd/mm/aa (la primera válida).
+  var dm = raw.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (dm) {
+    var d = parseInt(dm[1], 10), mo = parseInt(dm[2], 10), y = parseInt(dm[3], 10);
+    if (y < 100) y += 2000;
+    if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 2000 && y <= 2100) {
+      out.fecha = y + '-' + ('0' + mo).slice(-2) + '-' + ('0' + d).slice(-2);
+    }
+  }
+
+  // Monto: el número de la línea que dice TOTAL; si no hay, el monto
+  // con $ más grande del ticket. Quita $ , y separadores de miles.
+  function amountFrom(str) {
+    var m = String(str).match(/\$?\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})|\d+\.\d{2})/);
+    if (!m) return null;
+    var v = parseFloat(m[1].replace(/[,\s]/g, ''));
+    return (isFinite(v) && v > 0) ? v : null;
+  }
+  var totalLine = null;
+  for (var i = 0; i < lines.length; i++) {
+    // \btotal\b para no confundir TOTAL con SUBTOTAL.
+    if (/\btotal\b/i.test(lines[i])) { totalLine = lines[i]; break; }
+  }
+  if (totalLine) out.monto = amountFrom(totalLine);
+  if (out.monto === null) {
+    var best = null;
+    lines.forEach(function (l) {
+      if (/\d/.test(l) && /\$/.test(l)) {
+        var v = amountFrom(l);
+        if (v !== null && (best === null || v > best)) best = v;
+      }
+    });
+    out.monto = best;
+  }
+
+  // Concepto: nombre del negocio, normalmente la primera línea del
+  // ticket. Debe tener letras, no ser solo números/fecha/monto, y no ser
+  // un encabezado genérico (TICKET, FACTURA, TOTAL, etc.).
+  var skipRe = /^(ticket|factura|nota|venta|recibo|comprobante|total|subtotal|iva|fecha|folio|rfc|cambio|efectivo|tarjeta|gracias|propina|importe|concepto|descripcion|descripción|articulo|artículo|cantidad|precio|cliente|vendedor|caja|turno|sucursal|domicilio|telefono|teléfono|correo|gracias por su compra)/i;
+  for (var j = 0; j < lines.length; j++) {
+    var l = lines[j];
+    if (l.length < 3 || l.length > 60) continue;
+    if (!/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2}/.test(l)) continue;
+    if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]/.test(l)) continue; // fecha
+    if (/^\$?\s*[\d,\s]+\.\d{2}\s*$/.test(l)) continue; // solo un monto
+    if (skipRe.test(l)) continue;
+    // El nombre del negocio debe tener al menos una palabra de 4+ letras
+    // y no ser mayormente dígitos/símbolos: evita basura de OCR como
+    // "915 E) w E 00 CSS" (su palabra más larga tiene 3 letras).
+    var words = l.split(/\s+/);
+    var hasLongWord = words.some(function (w) { return /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{4,}/.test(w); });
+    if (!hasLongWord) continue;
+    var letters = (l.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g) || []).length;
+    if (letters * 2 < l.length) continue;
+    out.concepto = l.replace(/\s+/g, ' ').trim();
+    break;
+  }
+
+  // RFC mexicano: 3-4 letras + 6 dígitos + 3 alfanuméricos.
+  var rm = raw.toUpperCase().match(/\b([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})\b/);
+  if (rm) out.rfc = rm[1];
+  return out;
+}
+
+// Llena solo los campos que siguen vacíos (nunca pisa lo que ya escribió).
+// La fecha viene prellenada con hoy al arrancar la app, así que también se
+// acepta reemplazarla cuando sigue siendo hoy. Devuelve los nombres de los
+// campos que se llenaron.
+function fillExpenseFromTicket(p) {
+  var filled = [];
+  var g = function (id) { return document.getElementById(id); };
+  if (p.fecha && (!g('eFecha').value || g('eFecha').value === todayStr())) {
+    g('eFecha').value = p.fecha; filled.push('fecha');
+  }
+  if (p.monto !== null && !g('eMonto').value) {
+    g('eMonto').value = String(p.monto); filled.push('total');
+  }
+  if (p.concepto && !g('eConcepto').value.trim()) {
+    g('eConcepto').value = p.concepto; filled.push('concepto');
+  }
+  if (p.rfc && !g('eNota').value.trim()) {
+    g('eNota').value = 'RFC: ' + p.rfc; filled.push('RFC');
+  }
+  return filled;
+}
+
+function runTicketOcr(dataUrl) {
+  if (!dataUrl) return;
+  var myToken = ++ocrToken;
+  var status = document.getElementById('ocrStatus');
+  status.textContent = 'Leyendo ticket…';
+  loadOcrScript().then(function () {
+    if (myToken !== ocrToken || typeof Tesseract === 'undefined') return;
+    return Tesseract.recognize(dataUrl, 'spa', {
+      workerPath: 'ocr/worker.min.js',
+      corePath: 'ocr/tesseract-core.wasm.js',
+      langPath: 'ocr/lang',
+      // aapt2 descomprime los .gz de assets al empaquetar; el
+      // traineddata va sin .gz, por eso gzip:false (igual que en el
+      // lector de números de serie del Checklist).
+      gzip: false,
+      cacheMethod: 'none',
+      logger: function (m) {
+        if (myToken === ocrToken && m.status === 'recognizing text' && typeof m.progress === 'number') {
+          status.textContent = 'Leyendo ticket… ' + Math.round(m.progress * 100) + '%';
+        }
+      }
+    });
+  }).then(function (result) {
+    if (myToken !== ocrToken || !result) return;
+    var filled = fillExpenseFromTicket(parseTicketText(result.data.text || ''));
+    if (filled.length) {
+      status.textContent = 'Leído del ticket: ' + filled.join(', ') + ' — revísalo antes de guardar.';
+    } else {
+      status.textContent = '';
+    }
+  }).catch(function () {
+    // El OCR no pudo leer la foto: se limpia el aviso en silencio, el
+    // formulario queda como estaba y nada bloquea el guardado.
+    if (myToken === ocrToken) status.textContent = '';
+  });
+}
+// Foto con la cámara nativa (plugin Camera): el input file oculto con
+// capture falla en silencio en el WebView de Android, así que en la app
+// nativa se usa el plugin; fuera de la app se conserva el input como respaldo.
+function takeTicketPhoto() {
+  var plugins = capPlugins();
+  if (isNativeApp() && plugins && plugins.Camera && plugins.Camera.getPhoto) {
+    plugins.Camera.getPhoto({ source: 'camera', resultType: 'dataUrl', quality: 70 }).then(function (photo) {
+      if (photo && photo.dataUrl) handlePhotoDataUrl(photo.dataUrl);
+    }).catch(function (err) {
+      // El usuario canceló o negó el permiso: no hacer nada.
+      var msg = String((err && err.message) || '');
+      if (/cancel/i.test(msg)) return;
+      alert('No se pudo tomar la foto. Revisa el permiso de cámara e inténtalo de nuevo.');
+    });
+    return;
+  }
+  document.getElementById('photoCam').click();
+}
+
+// ---- Eventos ----
+document.getElementById('tripSelect').addEventListener('change', function (e) {
+  state.activeTripId = e.target.value;
+  filterPerson = '';
+  save(); render();
+});
+document.getElementById('btnHome').addEventListener('click', function () { showHome(); });
+document.getElementById('btnVistaViaje').addEventListener('click', function () { state.vistaGastos = 'viaje'; save(); render(); });
+document.getElementById('btnVistaUnificada').addEventListener('click', function () { state.vistaGastos = 'unificada'; save(); render(); });
+document.getElementById('btnGoCreate').addEventListener('click', function () {
+  var box = document.getElementById('newTripBox');
+  box.classList.toggle('hidden');
+  if (!box.classList.contains('hidden')) {
+    setTimeout(function () {
+      document.getElementById('btnSaveLaterTrip').scrollIntoView({ block: 'center' });
+    }, 100);
+  }
+});
+document.getElementById('homeView').addEventListener('click', function (e) {
+  var od = e.target.closest('[data-open-draft]');
+  if (od) {
+    var td = state.trips.find(function (t) { return t.id === od.getAttribute('data-open-draft'); });
+    if (td) { td.paraDespues = false; save(); openTrip(td.id); }
+    return;
+  }
+  var b = e.target.closest('[data-open-trip]');
+  if (b) { openTrip(b.getAttribute('data-open-trip')); return; }
+  var x = e.target.closest('[data-export-trip]');
+  if (x) {
+    var trip = state.trips.find(function (t) { return t.id === x.getAttribute('data-export-trip'); });
+    if (!trip) return;
+    downloadBlob(new Blob(['\ufeff' + buildTripExportCsv(trip)], { type: 'text/csv;charset=utf-8' }),
+      fileBase(trip) + '-viaje.csv').catch(function () { alert('No se pudo compartir el archivo. Inténtalo de nuevo.'); });
+    return;
+  }
+  var a = e.target.closest('[data-archive-trip]');
+  if (a) {
+    var ta = state.trips.find(function (t) { return t.id === a.getAttribute('data-archive-trip'); });
+    if (!ta) return;
+    ta.archived = true;
+    save(); render();
+    return;
+  }
+  var u = e.target.closest('[data-unarchive-trip]');
+  if (u) {
+    var tu = state.trips.find(function (t) { return t.id === u.getAttribute('data-unarchive-trip'); });
+    if (!tu) return;
+    tu.archived = false;
+    save(); render();
+    return;
+  }
+  var d = e.target.closest('[data-del-trip]');
+  if (d) { deleteTrip(d.getAttribute('data-del-trip')); }
+});
+// ---- Acerca de: reportar un problema ----
+document.getElementById('btnReportProblem').addEventListener('click', function () {
+  var body = 'Describe el problema:\n\n\nVersión de la app: 1.20';
+  window.location.href = 'mailto:gerardo.cruzhz@linux.com' +
+    '?subject=' + encodeURIComponent('Reporte de problema - Control de Gastos de Viaje 1.20') +
+    '&body=' + encodeURIComponent(body);
+});
+document.getElementById('btnExportAllCsv').addEventListener('click', function () {
+  if (!state.trips.length) { alert('No hay viajes guardados para exportar.'); return; }
+  downloadBlob(new Blob(['\ufeff' + buildAllTripsExportCsv()], { type: 'text/csv;charset=utf-8' }),
+    'gastos-viajes-todos.csv').catch(function () { alert('No se pudo compartir el archivo. Inténtalo de nuevo.'); });
+});
+document.getElementById('btnImportCsv').addEventListener('click', function () {
+  document.getElementById('importCsvFile').click();
+});
+document.getElementById('importCsvFile').addEventListener('change', function (e) {
+  var file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    var res = importTripsFromCsv(ev.target.result || '');
+    if (res.error) { alert(res.error); return; }
+    alert(importSummaryText(res));
+  };
+  reader.onerror = function () { alert('No se pudo leer el archivo CSV.'); };
+  reader.readAsText(file);
+});
+// ---- Crear viaje / Cancelar / Guardar para después ----
+function clearNewTripForm() {
+  ['tNombre', 'tDestino', 'tInicio', 'tFin'].forEach(function (id) { document.getElementById(id).value = ''; });
+  document.getElementById('tMoneda').value = 'MXN';
+  document.getElementById('newTripBox').classList.add('hidden');
+}
+function newTripFromForm() {
+  var v = function (id) { return document.getElementById(id).value.trim(); };
+  var nombre = v('tNombre');
+  if (!nombre) { alert('Pon el nombre del viaje o proyecto.'); return null; }
+  return {
+    id: uid(), nombre: nombre, destino: v('tDestino'),
+    inicio: document.getElementById('tInicio').value || todayStr(),
+    fin: document.getElementById('tFin').value || todayStr(),
+    moneda: document.getElementById('tMoneda').value,
+    billing: { razon: '', rfc: '', regimen: '', cp: '', uso: '', correo: '', constancia: null },
+    people: [], budget: [], expenses: [], archived: false, paraDespues: false
+  };
+}
+document.getElementById('btnAddTrip').addEventListener('click', function () {
+  var trip = newTripFromForm();
+  if (!trip) return;
+  state.trips.push(trip);
+  state.activeTripId = trip.id;
+  currentView = 'trip';
+  save();
+  clearNewTripForm();
+  render();
+});
+document.getElementById('btnCancelTrip').addEventListener('click', function () {
+  clearNewTripForm();
+});
+document.getElementById('btnSaveLaterTrip').addEventListener('click', function () {
+  var trip = newTripFromForm();
+  if (!trip) return;
+  trip.paraDespues = true;
+  state.trips.push(trip);
+  save();
+  clearNewTripForm();
+  render();
+  alert('Viaje guardado para después.');
+});
+document.getElementById('btnDelTrip').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  if (!confirm('¿Eliminar el viaje "' + trip.nombre + '" con su presupuesto, gastos y personas?')) return;
+  state.trips = state.trips.filter(function (t) { return t.id !== trip.id; });
+  state.activeTripId = state.trips.length ? state.trips[state.trips.length - 1].id : null;
+  currentView = 'home';
+  save(); render();
+});
+function showTab(name) {
+  currentTab = name;
+  document.querySelectorAll('#tabs .tab').forEach(function (c) { c.classList.toggle('on', c.getAttribute('data-tab') === name); });
+  ['resumen', 'presupuesto', 'gastos', 'personas', 'facturacion', 'reporte'].forEach(function (t) {
+    document.getElementById('tab-' + t).classList.toggle('hidden', t !== name);
+  });
+}
+document.getElementById('tabs').addEventListener('click', function (e) {
+  var b = e.target.closest('[data-tab]');
+  if (!b) return;
+  showTab(b.getAttribute('data-tab'));
+});
+document.getElementById('btnAddBudget').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  var monto = parseFloat(document.getElementById('bMonto').value);
+  var concepto = document.getElementById('bConcepto').value.trim();
+  if (!concepto || !(monto > 0)) { alert('Pon el concepto y un monto mayor a 0.'); return; }
+  trip.budget.push({ id: uid(), categoria: document.getElementById('bCat').value, concepto: concepto, monto: monto });
+  document.getElementById('bMonto').value = '';
+  document.getElementById('bConcepto').value = '';
+  save(); render();
+});
+document.getElementById('btnAddExpense').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  var monto = parseFloat(document.getElementById('eMonto').value);
+  var concepto = document.getElementById('eConcepto').value.trim();
+  if (!concepto || !(monto > 0)) { alert('Pon el concepto y un monto mayor a 0.'); return; }
+  trip.expenses.push({
+    id: uid(),
+    fecha: document.getElementById('eFecha').value || todayStr(),
+    categoria: document.getElementById('eCat').value,
+    concepto: concepto,
+    monto: monto,
+    personaId: document.getElementById('ePersona').disabled ? null : (document.getElementById('ePersona').value || null),
+    facturable: document.getElementById('eFacturable').checked,
+    folio: document.getElementById('eFolio').value.trim(),
+    facturaPdf: null, facturaXml: null,
+    nota: document.getElementById('eNota').value.trim(),
+    foto: pendingPhoto
+  });
+  pendingPhoto = null;
+  ocrToken++;
+  document.getElementById('photoPreview').innerHTML = '';
+  document.getElementById('ocrStatus').textContent = '';
+  ['eMonto', 'eConcepto', 'eFolio', 'eNota'].forEach(function (id) { document.getElementById(id).value = ''; });
+  document.getElementById('eFacturable').checked = true;
+  save(); render();
+});
+document.getElementById('btnPhotoCam').addEventListener('click', takeTicketPhoto);
+document.getElementById('btnPhotoGal').addEventListener('click', function () { document.getElementById('photoGal').click(); });
+document.getElementById('photoCam').addEventListener('change', function (e) { handlePhotoFile(e.target.files[0]); e.target.value = ''; });
+document.getElementById('photoGal').addEventListener('change', function (e) { handlePhotoFile(e.target.files[0]); e.target.value = ''; });
+document.getElementById('fConstancia').addEventListener('change', function (e) {
+  var file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+    alert('Solo se aceptan archivos PDF.');
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    alert('El archivo pesa más de 2 MB y puede no guardarse bien por el límite de almacenamiento del teléfono.');
+  }
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    formConstancia = { nombre: file.name, tamano: file.size, data: ev.target.result };
+    renderConstanciaInfo();
+  };
+  reader.onerror = function () { alert('No se pudo leer el archivo PDF.'); };
+  reader.readAsDataURL(file);
+});
+document.getElementById('fPersona').addEventListener('change', function (e) {
+  filterPerson = e.target.value;
+  var trip = activeTrip();
+  if (trip) renderExpenses(trip, computeSummary(trip));
+});
+document.getElementById('btnAddPerson').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  var nombre = document.getElementById('pNombre').value.trim();
+  if (!nombre) { alert('Pon el nombre de la persona.'); return; }
+  trip.people.push({ id: uid(), nombre: nombre, rol: document.getElementById('pRol').value.trim(), notas: document.getElementById('pNotas').value.trim() });
+  ['pNombre', 'pRol', 'pNotas'].forEach(function (id) { document.getElementById(id).value = ''; });
+  save(); render();
+});
+document.getElementById('selCopyBilling').addEventListener('change', function () {
+  var trip = activeTrip();
+  var id = this.value;
+  if (!trip || !id) return;
+  var src = state.trips.find(function (t) { return t.id === id; });
+  if (!src || !src.billing) { this.value = ''; return; }
+  var b = src.billing;
+  // Solo se llenan los campos del formulario; nada se guarda hasta que
+  // él toque "Guardar datos de facturación". El viaje de origen no se toca.
+  document.getElementById('fRazon').value = b.razon || '';
+  document.getElementById('fRfc').value = b.rfc || '';
+  document.getElementById('fRegimen').value = b.regimen || '';
+  document.getElementById('fCp').value = b.cp || '';
+  document.getElementById('fUso').value = b.uso || '';
+  document.getElementById('fCorreo').value = b.correo || '';
+  document.getElementById('fSendWA').value = b.whatsapp || '';
+  document.getElementById('fSendMail').value = b.correoEnvio || b.correo || '';
+  formConstancia = b.constancia ? { nombre: b.constancia.nombre, tamano: b.constancia.tamano, data: b.constancia.data } : null;
+  renderConstanciaInfo();
+  document.getElementById('copyBillingMsg').textContent = 'Datos copiados de ' + (src.nombre || 'otro viaje') + '. Revisa y guarda.';
+  this.value = '';
+});
+document.getElementById('btnSaveBilling').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  trip.billing = {
+    razon: document.getElementById('fRazon').value.trim(),
+    rfc: document.getElementById('fRfc').value.trim().toUpperCase(),
+    regimen: document.getElementById('fRegimen').value,
+    cp: document.getElementById('fCp').value.trim(),
+    uso: document.getElementById('fUso').value,
+    correo: document.getElementById('fCorreo').value.trim(),
+    whatsapp: document.getElementById('fSendWA').value.trim(),
+    correoEnvio: document.getElementById('fSendMail').value.trim(),
+    constancia: formConstancia
+  };
+  save();
+  alert('Datos de facturación guardados.');
+});
+document.getElementById('btnSendBillingWA').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  if (!billingHasData(trip)) { alert('Primero captura los datos de facturación del viaje.'); return; }
+  var wa = document.getElementById('fSendWA').value.trim();
+  var num = cleanPhone(wa);
+  if (!wa || num.length < 10) { alert('Agrega un número de WhatsApp válido (10 dígitos).'); return; }
+  trip.billing = trip.billing || {};
+  trip.billing.whatsapp = wa;
+  save();
+  window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(billingText(trip)), '_blank');
+});
+document.getElementById('btnSendBillingMail').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  if (!billingHasData(trip)) { alert('Primero captura los datos de facturación del viaje.'); return; }
+  var mail = document.getElementById('fSendMail').value.trim();
+  if (!mail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { alert('Agrega un correo destinatario válido.'); return; }
+  trip.billing = trip.billing || {};
+  trip.billing.correoEnvio = mail;
+  save();
+  window.location.href = 'mailto:' + encodeURIComponent(mail) +
+    '?subject=' + encodeURIComponent('Datos de facturación') +
+    '&body=' + encodeURIComponent(billingText(trip));
+});
+
+// Acciones delegadas: eliminar presupuesto/gasto/persona, guardar folio, ver foto
+document.getElementById('tab-presupuesto').addEventListener('click', function (e) {
+  var b = e.target.closest('[data-del-budget]');
+  if (!b) return;
+  var trip = activeTrip();
+  if (!trip) return;
+  trip.budget = trip.budget.filter(function (x) { return x.id !== b.getAttribute('data-del-budget'); });
+  save(); render();
+});
+document.getElementById('tab-gastos').addEventListener('click', function (e) {
+  var trip = activeTrip();
+  if (!trip) return;
+  var del = e.target.closest('[data-del-exp]');
+  if (del) {
+    if (!confirm('¿Eliminar este gasto?')) return;
+    trip.expenses = trip.expenses.filter(function (x) { return x.id !== del.getAttribute('data-del-exp'); });
+    save(); render();
+    return;
+  }
+  var sf = e.target.closest('[data-subir-factura]');
+  if (sf) {
+    showTab('facturacion');
+    var pl = document.getElementById('pendingList');
+    if (pl) pl.scrollIntoView();
+    return;
+  }
+  var th = e.target.closest('[data-photo]');
+  if (th) {
+    var ex = trip.expenses.find(function (x) { return x.id === th.getAttribute('data-photo'); });
+    if (ex && ex.foto) {
+      document.getElementById('lightboxImg').src = ex.foto;
+      document.getElementById('lightbox').classList.remove('hidden');
+    }
+  }
+});
+document.getElementById('tab-personas').addEventListener('click', function (e) {
+  var b = e.target.closest('[data-del-person]');
+  if (!b) return;
+  var trip = activeTrip();
+  if (!trip) return;
+  if (!confirm('¿Eliminar a esta persona? Sus gastos quedarán como “Compartido”.')) return;
+  var pid = b.getAttribute('data-del-person');
+  trip.people = trip.people.filter(function (x) { return x.id !== pid; });
+  trip.expenses.forEach(function (ex) { if (ex.personaId === pid) ex.personaId = null; });
+  save(); render();
+});
+document.getElementById('tab-facturacion').addEventListener('click', function (e) {
+  var trip = activeTrip();
+  if (!trip) return;
+  var b = e.target.closest('[data-set-folio]');
+  if (b) {
+    var ex = trip.expenses.find(function (x) { return x.id === b.getAttribute('data-set-folio'); });
+    if (!ex) return;
+    var folio = document.getElementById('folio-' + ex.id).value.trim();
+    if (!folio) { alert('Escribe el folio o UUID de la factura.'); return; }
+    ex.folio = folio;
+    save(); render();
+    return;
+  }
+  var sf = e.target.closest('[data-save-factura]');
+  if (sf) { guardarFactura(trip, sf.getAttribute('data-save-factura')); return; }
+  var vp = e.target.closest('[data-ver-fac-pdf]');
+  if (vp) {
+    var exP = trip.expenses.find(function (x) { return x.id === vp.getAttribute('data-ver-fac-pdf'); });
+    if (exP) abrirArchivoFactura(exP.facturaPdf);
+    return;
+  }
+  var vx = e.target.closest('[data-ver-fac-xml]');
+  if (vx) {
+    var exX = trip.expenses.find(function (x) { return x.id === vx.getAttribute('data-ver-fac-xml'); });
+    if (exX) abrirArchivoFactura(exX.facturaXml);
+    return;
+  }
+  var df = e.target.closest('[data-del-factura]');
+  if (df) {
+    var exD = trip.expenses.find(function (x) { return x.id === df.getAttribute('data-del-factura'); });
+    if (!exD) return;
+    if (!confirm('¿Quitar los archivos PDF y XML de esta factura? El gasto volverá a pendiente por facturar si no tiene folio.')) return;
+    exD.facturaPdf = null;
+    exD.facturaXml = null;
+    delete pendingFacturas[exD.id];
+    save(); render();
+    return;
+  }
+});
+document.getElementById('tab-facturacion').addEventListener('change', function (e) {
+  var trip = activeTrip();
+  if (!trip) return;
+  var pdfIn = e.target.closest ? e.target.closest('[data-fac-pdf]') : null;
+  var xmlIn = e.target.closest ? e.target.closest('[data-fac-xml]') : null;
+  if (!pdfIn && !xmlIn) return;
+  var id = pdfIn ? pdfIn.getAttribute('data-fac-pdf') : xmlIn.getAttribute('data-fac-xml');
+  var file = (e.target.files && e.target.files[0]) || null;
+  if (pdfIn && file && file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+    alert('Solo se aceptan archivos PDF.');
+    e.target.value = '';
+    return;
+  }
+  if (xmlIn && file && file.type !== 'text/xml' && file.type !== 'application/xml' && !/\.xml$/i.test(file.name)) {
+    alert('Solo se aceptan archivos XML.');
+    e.target.value = '';
+    return;
+  }
+  if (file && file.size > 2 * 1024 * 1024) {
+    alert('El archivo pesa más de 2 MB y puede no guardarse bien por el límite de almacenamiento del teléfono.');
+  }
+  if (!pendingFacturas[id]) pendingFacturas[id] = {};
+  if (pdfIn) pendingFacturas[id].pdf = file || null;
+  if (xmlIn) pendingFacturas[id].xml = file || null;
+  updateFacNames(id);
+});
+document.getElementById('lightbox').addEventListener('click', function () {
+  document.getElementById('lightbox').classList.add('hidden');
+});
+
+// ---- Compartir / descargar reporte ----
+document.getElementById('btnShareWA').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  var texto = reportText(trip, computeSummary(trip));
+  if (navigator.share) {
+    navigator.share({ title: 'Reporte de gastos: ' + trip.nombre, text: texto }).catch(function () {});
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank');
+  }
+});
+document.getElementById('btnShareMail').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  var texto = reportText(trip, computeSummary(trip));
+  var to = (trip.billing && trip.billing.correo) ? trip.billing.correo : '';
+  window.location.href = 'mailto:' + encodeURIComponent(to) +
+    '?subject=' + encodeURIComponent('Reporte de gastos: ' + trip.nombre) +
+    '&body=' + encodeURIComponent(texto);
+});
+document.getElementById('btnCsv').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  downloadBlob(new Blob(['\ufeff' + buildCsv(trip)], { type: 'text/csv;charset=utf-8' }), fileBase(trip) + '.csv').catch(function () { alert('No se pudo compartir el archivo. Inténtalo de nuevo.'); });
+});
+document.getElementById('btnPdf').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  downloadBlob(buildReportPdf(trip, computeSummary(trip)), fileBase(trip) + '.pdf').catch(function () { alert('No se pudo compartir el archivo. Inténtalo de nuevo.'); });
+});
+document.getElementById('btnXlsx').addEventListener('click', function () {
+  var trip = activeTrip();
+  if (!trip) return;
+  downloadBlob(buildXlsx(trip, computeSummary(trip)), fileBase(trip) + '-reporte.xlsx').catch(function () { alert('No se pudo compartir el archivo. Inténtalo de nuevo.'); });
+});
+
+// ---- Init ----
+document.getElementById('eFecha').value = todayStr();
+render();
+// Splash: la animación solo arranca cuando la página ya está pintada.
+// Antes corría al parsear, tapada por el splash nativo, y el usuario solo
+// veía el final. Se activa con la clase .play tras load + primer pintado.
+var splashEl = document.getElementById('splash');
+var splashStarted = false;
+function hideNativeSplash() {
+  try {
+    if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.SplashScreen && Capacitor.Plugins.SplashScreen.hide) {
+      Capacitor.Plugins.SplashScreen.hide();
+    }
+  } catch (e) {}
+}
+function startSplash() {
+  if (splashStarted || !splashEl) return;
+  splashStarted = true;
+  hideNativeSplash();
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      splashEl.classList.add('play');
+      setTimeout(function () { splashEl.classList.add('hide'); }, 2000);
+      setTimeout(function () { if (splashEl.parentNode) splashEl.remove(); }, 2600);
+    });
+  });
+  setTimeout(hideNativeSplash, 500);
+  setTimeout(hideNativeSplash, 1500);
+}
+if (document.readyState === 'complete') { startSplash(); }
+else { window.addEventListener('load', startSplash); }
+setTimeout(startSplash, 2500); // respaldo: arrancar aunque load tarde
+setTimeout(function () { // respaldo absoluto: el splash nunca bloquea la app
+  var s = document.getElementById('splash');
+  if (s) { s.classList.add('hide'); setTimeout(function () { if (s.parentNode) s.remove(); }, 600); }
+}, 6000);
+</script>
+</body>
+</html>

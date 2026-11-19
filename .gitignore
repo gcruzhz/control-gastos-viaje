@@ -1,0 +1,38 @@
+# Control de Gastos de Viaje — gitignore raíz
+# El keystore de firma y sus credenciales NUNCA van a GitHub.
+# Viven en ~/workspace/android/keys/ (fuera de este proyecto).
+
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Builds de Android / Gradle
+android/app/build/
+android/build/
+android/.gradle/
+android/capacitor-cordova-android-plugins/build/
+*.apk
+*.aab
+*.aar
+*.ap_
+*.dex
+*.class
+
+# Firma — NUNCA subir
+*.keystore
+*.jks
+keystore.properties
+
+# Copias locales de APKs y respaldos (no van al repo)
+backups/
+
+# Config local de Android Studio / SDK
+android/local.properties
+.idea/
+*.iml
+
+# Generados
+dist/
+out/
+*.log
+.DS_Store
